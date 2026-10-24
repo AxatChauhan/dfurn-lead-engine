@@ -57,14 +57,6 @@ export default function RootLayout({
                 <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse"></span>
                 <span>Port 3001 Active</span>
               </div>
-              <a
-                href="http://localhost:3000"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-medium text-[#4B5563] hover:text-[#FF7700] bg-[#F3F4F6] hover:bg-[#E5E7EB] px-3 py-1.5 rounded border border-[#D1D5DB] transition"
-              >
-                Open D'furn ERP ↗
-              </a>
             </div>
           </div>
         </header>
