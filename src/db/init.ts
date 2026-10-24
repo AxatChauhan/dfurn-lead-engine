@@ -3,12 +3,27 @@ import path from "path";
 import fs from "fs";
 
 export function initializeDatabase() {
-  const dbDir = path.join(process.cwd(), "data");
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+  const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const bundledDbDir = path.join(process.cwd(), "data");
+  const bundledDbPath = path.join(bundledDbDir, "dfurn_lead_engine.db");
+
+  let dbPath: string;
+  if (isVercel) {
+    dbPath = path.join("/tmp", "dfurn_lead_engine.db");
+    if (!fs.existsSync(/*turbopackIgnore: true*/ dbPath) && fs.existsSync(bundledDbPath)) {
+      try {
+        fs.copyFileSync(bundledDbPath, dbPath);
+      } catch (e) {
+        console.error("Failed to copy bundled db to /tmp:", e);
+      }
+    }
+  } else {
+    if (!fs.existsSync(bundledDbDir)) {
+      fs.mkdirSync(bundledDbDir, { recursive: true });
+    }
+    dbPath = bundledDbPath;
   }
 
-  const dbPath = path.join(dbDir, "dfurn_lead_engine.db");
   const sqlite = new DatabaseConstructor(dbPath);
 
   // Enable Write-Ahead Logging for high performance concurrency
