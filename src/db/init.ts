@@ -47,8 +47,9 @@ export function initializeDatabase() {
       id TEXT PRIMARY KEY,
       search_id TEXT,
       business_name TEXT NOT NULL,
+      contact_person TEXT,
       industry TEXT,
-      category TEXT DEFAULT 'Architect',
+      category TEXT DEFAULT 'Commercial Office',
       city TEXT,
       state TEXT,
       address TEXT,
@@ -57,8 +58,23 @@ export function initializeDatabase() {
       website TEXT,
       rating REAL,
       review_count INTEGER,
-      source_type TEXT DEFAULT 'google_maps',
+      source_type TEXT DEFAULT 'paid_ads',
       source_url TEXT,
+      lead_source TEXT DEFAULT 'paid_ads_meta',
+      campaign_name TEXT,
+      adset_name TEXT,
+      ad_name TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      project_type TEXT,
+      workstation_count INTEGER,
+      project_timeline TEXT,
+      has_floor_plan INTEGER DEFAULT 0,
+      estimated_budget TEXT,
+      qualification_stage TEXT DEFAULT 'NEW',
+      operator_notes TEXT,
+      last_contacted_at INTEGER,
       total_score INTEGER DEFAULT 0,
       lead_tier TEXT DEFAULT 'C',
       fit_score INTEGER DEFAULT 0,
@@ -114,6 +130,43 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_candidates_city ON candidates(city);
     CREATE INDEX IF NOT EXISTS idx_outreach_approval ON outreach_messages(approval_status);
   `);
+
+  // Safely migrate existing tables with new columns if missing
+  try {
+    const candidateCols = sqlite.pragma("table_info(candidates)") as { name: string }[];
+    const existingColNames = new Set(candidateCols.map((c) => c.name));
+
+    const colsToAdd = [
+      { name: "contact_person", type: "TEXT" },
+      { name: "lead_source", type: "TEXT DEFAULT 'paid_ads_meta'" },
+      { name: "campaign_name", type: "TEXT" },
+      { name: "adset_name", type: "TEXT" },
+      { name: "ad_name", type: "TEXT" },
+      { name: "utm_source", type: "TEXT" },
+      { name: "utm_medium", type: "TEXT" },
+      { name: "utm_campaign", type: "TEXT" },
+      { name: "project_type", type: "TEXT" },
+      { name: "workstation_count", type: "INTEGER" },
+      { name: "project_timeline", type: "TEXT" },
+      { name: "has_floor_plan", type: "INTEGER DEFAULT 0" },
+      { name: "estimated_budget", type: "TEXT" },
+      { name: "qualification_stage", type: "TEXT DEFAULT 'NEW'" },
+      { name: "operator_notes", type: "TEXT" },
+      { name: "last_contacted_at", type: "INTEGER" },
+    ];
+
+    for (const col of colsToAdd) {
+      if (!existingColNames.has(col.name)) {
+        try {
+          sqlite.exec(`ALTER TABLE candidates ADD COLUMN ${col.name} ${col.type}`);
+        } catch (e) {
+          console.warn(`[DB Migration] Column ${col.name} warning:`, e);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[DB Migration] pragma table_info warning:", err);
+  }
 
   return sqlite;
 }

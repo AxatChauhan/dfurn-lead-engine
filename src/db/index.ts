@@ -11,7 +11,7 @@ export { sqlite };
 
 // Auto-seed baseline demonstration prospects if table is empty
 try {
-  seedDemoData();
+  seedDemoData(db);
 } catch (err) {
   console.log("[DB Seed] Note:", err);
 }

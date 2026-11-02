@@ -159,3 +159,51 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await req.json();
+
+    const candidate = db.select().from(candidates).where(eq(candidates.id, id)).get();
+    if (!candidate) {
+      return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
+    }
+
+    const updateFields: any = {
+      updatedAt: new Date(),
+    };
+
+    if (body.qualificationStage !== undefined) {
+      updateFields.qualificationStage = body.qualificationStage;
+      if (body.qualificationStage === "CONTACTED" && !candidate.lastContactedAt) {
+        updateFields.lastContactedAt = new Date();
+      }
+    }
+    if (body.operatorNotes !== undefined) updateFields.operatorNotes = body.operatorNotes;
+    if (body.contactPerson !== undefined) updateFields.contactPerson = body.contactPerson;
+    if (body.category !== undefined) updateFields.category = body.category;
+    if (body.projectType !== undefined) updateFields.projectType = body.projectType;
+    if (body.workstationCount !== undefined) {
+      updateFields.workstationCount = body.workstationCount ? parseInt(body.workstationCount, 10) : null;
+    }
+    if (body.hasFloorPlan !== undefined) updateFields.hasFloorPlan = Boolean(body.hasFloorPlan);
+    if (body.projectTimeline !== undefined) updateFields.projectTimeline = body.projectTimeline;
+    if (body.markContacted) updateFields.lastContactedAt = new Date();
+
+    db.update(candidates)
+      .set(updateFields)
+      .where(eq(candidates.id, id))
+      .run();
+
+    const updated = db.select().from(candidates).where(eq(candidates.id, id)).get();
+
+    return NextResponse.json({ success: true, candidate: updated });
+  } catch (error: any) {
+    console.error("[Candidate PATCH API] Error:", error);
+    return NextResponse.json({ error: error.message || "Failed to update candidate" }, { status: 500 });
+  }
+}

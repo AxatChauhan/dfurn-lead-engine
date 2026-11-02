@@ -32,9 +32,9 @@ export async function pushCandidateToErp(candidateId: string): Promise<ErpSyncRe
   const erpBaseUrl = process.env.DFURN_ERP_URL || "http://localhost:3000";
   const intakeUrl = `${erpBaseUrl}/api/enquiries/intake`;
 
-  // Parse decision makers if available
-  let decisionMakerName = "";
-  if (candidate.decisionMakers) {
+  // Parse contact person or decision makers if available
+  let decisionMakerName = candidate.contactPerson || "";
+  if (!decisionMakerName && candidate.decisionMakers) {
     try {
       const dm = JSON.parse(candidate.decisionMakers);
       if (Array.isArray(dm) && dm.length > 0) {
@@ -43,28 +43,52 @@ export async function pushCandidateToErp(candidateId: string): Promise<ErpSyncRe
     } catch {}
   }
 
-  const briefParts: string[] = [
-    `Lead Engine Source: ${candidate.category || "Studio"} in ${candidate.city || "India"}`,
-    `Lead Tier: ${candidate.leadTier} (Score: ${candidate.totalScore}/100)`,
-  ];
-  if (candidate.reasoning) briefParts.push(`Evaluation: ${candidate.reasoning}`);
-  if (decisionMakerName) briefParts.push(`Key Contact: ${decisionMakerName}`);
+  const briefParts: string[] = [];
+  if (candidate.leadSource?.startsWith("paid_ads")) {
+    briefParts.push(`Paid Ad Lead (${candidate.campaignName || "Ad Campaign"}) in ${candidate.city || "India"}`);
+  } else {
+    briefParts.push(`Source: ${candidate.category || "Commercial Office"} in ${candidate.city || "India"}`);
+  }
+
+  if (candidate.projectType) briefParts.push(`Scope: ${candidate.projectType}`);
+  if (candidate.workstationCount) briefParts.push(`Scale: ${candidate.workstationCount} Workstations`);
+  if (candidate.hasFloorPlan) briefParts.push("Floor Plan: Verified/Available");
+  if (candidate.projectTimeline) briefParts.push(`Timeline: ${candidate.projectTimeline}`);
+  if (decisionMakerName) briefParts.push(`Contact: ${decisionMakerName}`);
+  if (candidate.operatorNotes) {
+    briefParts.push(`Notes: ${candidate.operatorNotes}`);
+  } else if (candidate.reasoning) {
+    briefParts.push(`Notes: ${candidate.reasoning}`);
+  }
+
+  const isPaidAd = candidate.leadSource?.startsWith("paid_ads");
+  const channel = isPaidAd ? "Paid Ads" : "Lead Engine";
+  const sourceCategory = isPaidAd
+    ? "Social Media"
+    : candidate.category === "Architect"
+    ? "Architect/Designer"
+    : "Direct";
 
   const payload = {
-    channel: "Lead Engine",
+    channel,
     externalId: candidate.id,
     clientName: candidate.businessName,
     clientPhone: candidate.phone,
     clientEmail: candidate.email || undefined,
     clientCountry: "IN",
-    sourceCategory: candidate.category === "Architect" ? "Architect/Designer" : "Direct",
+    sourceCategory,
+    sourceName: candidate.campaignName || candidate.utmCampaign || undefined,
     brief: briefParts.join(" · "),
     payload: {
       category: candidate.category,
       city: candidate.city,
-      rating: candidate.rating,
-      reviewCount: candidate.reviewCount,
-      website: candidate.website,
+      leadSource: candidate.leadSource,
+      campaignName: candidate.campaignName,
+      projectType: candidate.projectType,
+      workstationCount: candidate.workstationCount,
+      hasFloorPlan: candidate.hasFloorPlan,
+      qualificationStage: candidate.qualificationStage,
+      operatorNotes: candidate.operatorNotes,
       leadTier: candidate.leadTier,
       totalScore: candidate.totalScore,
     },
@@ -92,6 +116,7 @@ export async function pushCandidateToErp(candidateId: string): Promise<ErpSyncRe
     db.update(candidates)
       .set({
         status: "SYNCED_TO_ERP",
+        qualificationStage: "CONVERTED",
         syncedToErpAt: new Date(),
         erpEnquiryCode: enquiryCode,
         erpClientCode: clientCode,

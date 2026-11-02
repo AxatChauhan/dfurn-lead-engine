@@ -3,8 +3,8 @@ import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "D'furn Lead Engine · Local Command Center",
-  description: "Zero-cost discovery, 5D qualification, and outreach engine for D'furn Modular Systems.",
+  title: "D'furn Lead Engine · Paid Ads & Inquiry Cockpit",
+  description: "Speed-to-lead response, operator-controlled qualification, and frictionless ERP enquiry conversion for Paid Ads.",
 };
 
 export const viewport: Viewport = {

@@ -6,12 +6,17 @@ import { desc, eq, and, sql } from "drizzle-orm";
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const stage = searchParams.get("stage");
     const tier = searchParams.get("tier");
     const category = searchParams.get("category");
     const city = searchParams.get("city");
+    const source = searchParams.get("source");
     const status = searchParams.get("status");
 
     const conditions: any[] = [];
+    if (stage && stage !== "ALL") {
+      conditions.push(eq(candidates.qualificationStage, stage));
+    }
     if (tier && tier !== "ALL") {
       conditions.push(eq(candidates.leadTier, tier));
     }
@@ -21,20 +26,41 @@ export async function GET(req: NextRequest) {
     if (city && city !== "ALL") {
       conditions.push(eq(candidates.city, city));
     }
+    if (source && source !== "ALL") {
+      conditions.push(eq(candidates.leadSource, source));
+    }
     if (status && status !== "ALL") {
       conditions.push(eq(candidates.status, status));
     }
 
     const query = db.select().from(candidates);
     const candidateList = conditions.length > 0
-      ? query.where(and(...conditions)).orderBy(desc(candidates.totalScore), desc(candidates.createdAt)).all()
-      : query.orderBy(desc(candidates.totalScore), desc(candidates.createdAt)).all();
+      ? query.where(and(...conditions)).orderBy(desc(candidates.createdAt)).all()
+      : query.orderBy(desc(candidates.createdAt)).all();
 
-    // Aggregated counts for tabs
-    const allCandidates = db.select({ leadTier: candidates.leadTier, status: candidates.status }).from(candidates).all();
+    // Aggregated counts for stage tabs & tier tabs
+    const allCandidates = db
+      .select({
+        leadTier: candidates.leadTier,
+        status: candidates.status,
+        qualificationStage: candidates.qualificationStage,
+        leadSource: candidates.leadSource,
+      })
+      .from(candidates)
+      .all();
+
+    const stageCounts = {
+      total: allCandidates.length,
+      new: allCandidates.filter((c) => (c.qualificationStage || "NEW") === "NEW").length,
+      contacted: allCandidates.filter((c) => c.qualificationStage === "CONTACTED").length,
+      followUp: allCandidates.filter((c) => c.qualificationStage === "FOLLOW_UP").length,
+      qualified: allCandidates.filter((c) => c.qualificationStage === "QUALIFIED").length,
+      converted: allCandidates.filter((c) => c.qualificationStage === "CONVERTED" || c.status === "SYNCED_TO_ERP").length,
+      lost: allCandidates.filter((c) => c.qualificationStage === "LOST" || c.status === "REJECTED").length,
+    };
 
     const counts = {
-      total: allCandidates.length,
+      ...stageCounts,
       tierAPlus: allCandidates.filter((c) => c.leadTier === "A+").length,
       tierA: allCandidates.filter((c) => c.leadTier === "A").length,
       tierB: allCandidates.filter((c) => c.leadTier === "B").length,
@@ -45,6 +71,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       candidates: candidateList,
       counts,
+      stageCounts,
     });
   } catch (error: any) {
     console.error("[Candidates API] Error:", error);

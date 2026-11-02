@@ -18,8 +18,9 @@ export const candidates = sqliteTable("candidates", {
   id: text("id").primaryKey(),
   searchId: text("search_id").references(() => searches.id),
   businessName: text("business_name").notNull(),
+  contactPerson: text("contact_person"),
   industry: text("industry"),
-  category: text("category").default("Architect"), // Architect, Interior Designer, Fitout Contractor, Coworking
+  category: text("category").default("Commercial Office"), // Commercial Office, Coworking, Fitout Contractor, Architect, Residential
   city: text("city"),
   state: text("state"),
   address: text("address"),
@@ -28,8 +29,28 @@ export const candidates = sqliteTable("candidates", {
   website: text("website"),
   rating: real("rating"),
   reviewCount: integer("review_count"),
-  sourceType: text("source_type").default("google_maps"), // google_maps, bing, directory
-  sourceUrl: text("source_url"),
+  sourceType: text("source_type").default("paid_ads"), // paid_ads, google_maps, bing, directory, manual
+
+  // Paid Ads Attribution & UTM Context
+  leadSource: text("lead_source").default("paid_ads_meta"), // paid_ads_meta, paid_ads_google, website_form, manual, google_maps
+  campaignName: text("campaign_name"),
+  adsetName: text("adset_name"),
+  adName: text("ad_name"),
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+
+  // Project Specifics (from Lead Forms)
+  projectType: text("project_type"), // Modular Workstations, Full Office Fitout, Executive Cabins, Acoustic Pods
+  workstationCount: integer("workstation_count"),
+  projectTimeline: text("project_timeline"), // Immediate (<15 days), 1-2 months, Planning
+  hasFloorPlan: integer("has_floor_plan", { mode: "boolean" }).default(false),
+  estimatedBudget: text("estimated_budget"),
+
+  // Operator-Controlled Status Pipeline
+  qualificationStage: text("qualification_stage").default("NEW"), // NEW, CONTACTED, FOLLOW_UP, QUALIFIED, CONVERTED, LOST
+  operatorNotes: text("operator_notes"),
+  lastContactedAt: integer("last_contacted_at", { mode: "timestamp" }),
 
   // 5D Scoring (0–100)
   totalScore: integer("total_score").default(0),
