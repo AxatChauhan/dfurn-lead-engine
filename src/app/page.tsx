@@ -69,6 +69,8 @@ interface Lead {
   projectTimeline?: string;
   estimatedBudget?: string;
   leadTier?: string;
+  totalScore?: number;
+  hasCommercialFocus?: boolean;
   qualificationStage?: string;
   operatorNotes?: string;
   portfolioTags?: string;
@@ -2331,7 +2333,7 @@ export default function DashboardPage() {
                   <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB] text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">
                     <th className="py-3 px-4">Lead & Contact</th>
                     <th className="py-3 px-4">Channel & Sub-Source</th>
-                    <th className="py-3 px-4">Scope & Scale</th>
+                    <th className="py-3 px-4">Lead Tier</th>
                     <th className="py-3 px-4">Outreach & WhatsApp</th>
                     <th className="py-3 px-4">Pipeline Stage</th>
                     <th className="py-3 px-4 text-right">ERP Handoff</th>
@@ -2380,11 +2382,8 @@ export default function DashboardPage() {
                             </div>
                             <div className="text-[11px] text-[#6B7280] mt-0.5">
                               {lead.contactPerson ? `${lead.contactPerson} · ` : ""}
-                              {lead.city}
+                              {lead.city} · {lead.category || "Commercial Specifier"}
                             </div>
-                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#F3F4F6] text-[#4B5563] inline-block mt-0.5">
-                              Tier {lead.leadTier || "A"}
-                            </span>
                           </div>
                         </td>
 
@@ -2416,20 +2415,32 @@ export default function DashboardPage() {
                           </div>
                         </td>
 
-                        {/* Scope & Scale */}
-                        <td className="py-3 px-4 min-w-[150px]">
-                          <div className="space-y-0.5">
-                            <span className="font-semibold text-[#111827]">
-                              {lead.projectType || "Modular Furniture"}
-                            </span>
-                            <div className="text-[11px] text-[#4B5563]">
-                              {lead.workstationCount ? (
-                                <span className="font-medium text-[#111827]">
-                                  {lead.workstationCount} Seats
+                        {/* Lead Tier */}
+                        <td className="py-3 px-4 min-w-[140px]">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded-md border inline-flex items-center gap-1 ${
+                                  (lead.leadTier || "A") === "A+"
+                                    ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]"
+                                    : (lead.leadTier || "A") === "A"
+                                    ? "bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]"
+                                    : (lead.leadTier || "A") === "B"
+                                    ? "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]"
+                                    : "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]"
+                                }`}
+                              >
+                                <span>Tier {lead.leadTier || "A"}</span>
+                              </span>
+                              {lead.totalScore !== undefined && lead.totalScore !== null && (
+                                <span className="text-[11px] font-semibold text-[#4B5563]">
+                                  {lead.totalScore} pts
                                 </span>
-                              ) : (
-                                <span>None specified</span>
                               )}
+                            </div>
+                            <div className="text-[10px] text-[#6B7280] leading-tight">
+                              {lead.hasCommercialFocus ? "Commercial Focus" : "General Specifier"}
+                              {lead.workstationCount ? ` · ${lead.workstationCount} Seats` : ""}
                             </div>
                           </div>
                         </td>
