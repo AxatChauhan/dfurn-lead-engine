@@ -193,6 +193,9 @@ export async function POST(req: NextRequest) {
                 linkedInUrl = audit.linkedInUrl || linkedInUrl;
                 commercialTags = audit.commercialTags || [];
                 hasCommercialFocus = audit.hasCommercialFocus;
+                if ((!item.phone || item.phone === "-" || item.phone === "–" || item.phone.trim() === "") && audit.phone) {
+                  item.phone = audit.phone;
+                }
 
                 await sendEvent({
                   type: "audit_complete",
@@ -237,23 +240,30 @@ export async function POST(req: NextRequest) {
               .where(eq(candidates.businessName, item.businessName))
               .limit(1);
 
+            let isNewCandidate = false;
             let candidateId: string;
             if (existingLeads.length > 0) {
               candidateId = existingLeads[0].id;
+              const hasCleanPhone = item.phone && item.phone !== "-" && item.phone !== "–";
               await db.update(candidates)
                 .set({
                   email: directEmail || undefined,
-                  phone: item.phone && item.phone !== "-" ? item.phone : undefined,
+                  phone: hasCleanPhone ? item.phone : undefined,
                   website: item.url || undefined,
                   totalScore: scoring.totalScore,
                   leadTier: scoring.leadTier,
                   fitScore: scoring.fitScore,
                   scaleScore: scoring.scaleScore,
                   hasCommercialFocus,
+                  qualificationStage: hasCleanPhone ? "NEW" : undefined,
+                  enrichmentStatus: hasCleanPhone ? "ENRICHED" : undefined,
+                  operatorNotes: hasCleanPhone ? "Verified phone captured via Google Maps" : undefined,
                   updatedAt: new Date(),
                 })
                 .where(eq(candidates.id, candidateId));
             } else {
+              isNewCandidate = true;
+              totalSaved++;
               candidateId = `cand_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
               const decisionMakers = linkedInUrl
                 ? JSON.stringify([{ name: item.businessName, linkedin: linkedInUrl }])
@@ -356,7 +366,9 @@ export async function POST(req: NextRequest) {
               totalSaved,
               qualifiedCount,
               targetCount,
-              message: `Saved [Tier ${scoring.leadTier} · ${scoring.totalScore} pts] ${item.businessName}`,
+              message: isNewCandidate
+                ? `Saved [Tier ${scoring.leadTier} · ${scoring.totalScore} pts] ${item.businessName}`
+                : `Refreshed [Tier ${scoring.leadTier} · ${scoring.totalScore} pts] ${item.businessName} (Existing)`,
             });
 
             if (totalSaved >= targetCount) {

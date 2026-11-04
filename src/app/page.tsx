@@ -182,6 +182,10 @@ export default function DashboardPage() {
     message: "",
   });
 
+  // Lead Contact Enrichment State
+  const [enrichingLeadId, setEnrichingLeadId] = useState<string | null>(null);
+  const [bulkEnriching, setBulkEnriching] = useState<boolean>(false);
+
   // Reject Lead Action State
   const [showRejectConfirmModal, setShowRejectConfirmModal] = useState<boolean>(false);
   const [rejectingLead, setRejectingLead] = useState<Lead | null>(null);
@@ -1081,6 +1085,71 @@ export default function DashboardPage() {
     }
   };
 
+  // Enrich Single Lead Contact & Phone
+  const handleEnrichLead = async (leadId: string) => {
+    setEnrichingLeadId(leadId);
+    try {
+      const res = await fetch(`/api/candidates/${leadId}/enrich`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.phone) {
+        setLeads((prev) =>
+          prev.map((l) =>
+            l.id === leadId
+              ? {
+                  ...l,
+                  ...data.candidate,
+                  phone: data.phone,
+                  qualificationStage: "NEW",
+                  enrichmentStatus: "ENRICHED",
+                }
+              : l
+          )
+        );
+        setStageCounts((prev) => ({
+          ...prev,
+          new: prev.new + 1,
+          lost: Math.max(0, prev.lost - 1),
+        }));
+        loadEvents(leadId);
+        alert(`Success: Verified phone found: ${data.phone}! Lead restored to New.`);
+      } else {
+        alert(data.message || "No verified phone number found across Google Maps and web directories.");
+      }
+    } catch (err: any) {
+      alert("Enrichment error: " + err.message);
+    } finally {
+      setEnrichingLeadId(null);
+    }
+  };
+
+  // Bulk Enrich All Lost Leads
+  const handleBulkEnrichLostLeads = async () => {
+    setBulkEnriching(true);
+    setBlockingLoader({
+      active: true,
+      message: "Enriching lost leads via Google Maps & web search...",
+    });
+    try {
+      const res = await fetch("/api/candidates/bulk-enrich", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await fetchLeads(false);
+        alert(`Bulk Enrichment Complete: ${data.message}`);
+      } else {
+        alert(data.message || "Failed to complete bulk enrichment.");
+      }
+    } catch (err: any) {
+      alert("Bulk enrichment error: " + err.message);
+    } finally {
+      setBulkEnriching(false);
+      setBlockingLoader({ active: false, message: "" });
+    }
+  };
+
   // CSV Export Download
   const handleExportCsv = () => {
     setBlockingLoader({
@@ -1590,6 +1659,25 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {selectedStage === "LOST" && displayedLeads.length > 0 && (
+              <div className="px-3.5 py-2.5 bg-[#FEF2F2] border-b border-[#FECACA] flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#991B1B]">
+                  <AlertTriangle className="w-3.5 h-3.5 text-[#DC2626] shrink-0" />
+                  <span>{displayedLeads.length} Lost Lead(s) Missing Phone</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBulkEnrichLostLeads}
+                  disabled={bulkEnriching}
+                  className="text-xs px-2.5 py-1 rounded-md font-bold bg-[#DC2626] hover:bg-[#B91C1C] text-white transition flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+                  title="Enrich all lost leads with Google Maps and web directory search"
+                >
+                  <Sparkles className={`w-3 h-3 ${bulkEnriching ? "animate-spin" : ""}`} />
+                  <span>{bulkEnriching ? "Enriching All..." : "Enrich All Lost Leads"}</span>
+                </button>
+              </div>
+            )}
+
             <div className="overflow-y-auto divide-y divide-[#E5E7EB] flex-1">
               {loading ? (
                 <div className="p-12 text-center">
@@ -1731,6 +1819,22 @@ export default function DashboardPage() {
                               No Phone
                             </span>
                           )}
+
+                          {(currentStage === "LOST" || !lead.phone || lead.phone === "-" || lead.phone === "–") && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEnrichLead(lead.id);
+                              }}
+                              disabled={enrichingLeadId === lead.id}
+                              className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE] hover:bg-[#DBEAFE] transition flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0"
+                              title="Search Google Maps & web search for phone number"
+                            >
+                              <Sparkles className={`w-3 h-3 text-[#2563EB] ${enrichingLeadId === lead.id ? "animate-spin" : ""}`} />
+                              <span>{enrichingLeadId === lead.id ? "Finding..." : "Enrich Phone"}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -1819,18 +1923,39 @@ export default function DashboardPage() {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6B7280] mt-1.5">
-                            <span className="font-medium text-[#111827]">
-                              Contact: {activeLead.contactPerson || "None"}
-                            </span>
-                            <span>·</span>
+                            {activeLead.contactPerson && activeLead.contactPerson.toLowerCase() !== "none" ? (
+                              <>
+                                <span className="font-medium text-[#111827]">
+                                  Contact: {activeLead.contactPerson}
+                                </span>
+                                <span>·</span>
+                              </>
+                            ) : null}
                             <span>City: {activeLead.city}</span>
-                            <span>·</span>
-                            <span>Phone: {activeLead.phone}</span>
+                            {activeLead.phone ? (
+                              <>
+                                <span>·</span>
+                                <span>Phone: {activeLead.phone}</span>
+                              </>
+                            ) : null}
                           </div>
                         </div>
 
                         {/* Primary ERP Push & Status Indicator */}
                         <div className="flex items-center gap-2 flex-wrap">
+                          {(activeLead.qualificationStage === "LOST" || !activeLead.phone || activeLead.phone === "-" || activeLead.phone === "–") && (
+                            <button
+                              type="button"
+                              onClick={() => handleEnrichLead(activeLead.id)}
+                              disabled={enrichingLeadId === activeLead.id}
+                              className="text-xs px-3.5 py-1.5 rounded-md font-bold bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE] hover:bg-[#DBEAFE] transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                              title="Search Google Maps and web directories for phone numbers"
+                            >
+                              <Sparkles className={`w-3.5 h-3.5 text-[#2563EB] ${enrichingLeadId === activeLead.id ? "animate-spin" : ""}`} />
+                              <span>{enrichingLeadId === activeLead.id ? "Finding Phone..." : "Enrich Phone"}</span>
+                            </button>
+                          )}
+
                           {activeLead.status === "SYNCED_TO_ERP" || activeLead.erpEnquiryCode ? (
                             <span className="text-xs font-bold text-[#059669] bg-[#ECFDF5] border border-[#A7F3D0] px-3 py-1.5 rounded-md flex items-center gap-1.5">
                               <Check className="w-4 h-4" />
@@ -1905,6 +2030,29 @@ export default function DashboardPage() {
                           <p className="text-[11px] text-[#78350F] leading-relaxed">
                             This lead submitted a test or repeating sequence phone number. Kept in the portal for manual operator review instead of discarding. Verify alternate contact info (email: {activeLead.email || "none"}) before initiating WhatsApp outreach.
                           </p>
+                        </div>
+                      )}
+                      {/* Lost / Incomplete Lead Recovery Banner */}
+                      {(activeLead.qualificationStage === "LOST" || !activeLead.phone || activeLead.phone === "-" || activeLead.phone === "–") && (
+                        <div className="bg-[#FEF2F2] rounded-xl border border-[#FECACA] p-3.5 flex items-center justify-between gap-3 flex-wrap">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-[#991B1B]">
+                              <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
+                              <span>Lost / Incomplete Lead (Missing Phone Number)</span>
+                            </div>
+                            <p className="text-[11px] text-[#7F1D1D]">
+                              This candidate was routed to Lost because telephone contact details were missing. Click below to search Google Maps & web directories.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleEnrichLead(activeLead.id)}
+                            disabled={enrichingLeadId === activeLead.id}
+                            className="text-xs px-3.5 py-1.5 rounded-md font-bold bg-[#DC2626] hover:bg-[#B91C1C] text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+                          >
+                            <Sparkles className={`w-3.5 h-3.5 ${enrichingLeadId === activeLead.id ? "animate-spin" : ""}`} />
+                            <span>{enrichingLeadId === activeLead.id ? "Finding Phone..." : "Find Phone & Restore"}</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -2297,7 +2445,7 @@ export default function DashboardPage() {
                               </span>
                             )}
 
-                            {lead.phone ? (
+                            {lead.phone && lead.phone !== "-" && lead.phone !== "–" ? (
                               <button
                                 onClick={() => handleLaunchWhatsApp(lead)}
                                 className="text-xs font-semibold bg-[#25D366] hover:bg-[#20BA5A] text-white px-2.5 py-1 rounded flex items-center gap-1.5 shadow-xs transition"
@@ -2307,7 +2455,15 @@ export default function DashboardPage() {
                                 <span>WhatsApp</span>
                               </button>
                             ) : (
-                              <span className="text-[11px] text-[#9CA3AF]">No Phone</span>
+                              <button
+                                onClick={() => handleEnrichLead(lead.id)}
+                                disabled={enrichingLeadId === lead.id}
+                                className="text-xs font-bold bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE] hover:bg-[#DBEAFE] px-2.5 py-1 rounded flex items-center gap-1.5 shadow-xs transition cursor-pointer disabled:opacity-50"
+                                title="Enrich phone number via Google Maps & web search"
+                              >
+                                <Sparkles className={`w-3.5 h-3.5 text-[#2563EB] ${enrichingLeadId === lead.id ? "animate-spin" : ""}`} />
+                                <span>{enrichingLeadId === lead.id ? "Finding..." : "Enrich Phone"}</span>
+                              </button>
                             )}
                           </div>
                         </td>
