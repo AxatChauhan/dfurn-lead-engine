@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     const location = String(body.location || "Ahmedabad").trim();
     const targetCount = Number(body.targetCount) || 15;
     const runAudit = body.runAudit !== false;
+    const headless = body.headless !== false;
     const sessionId = String(body.sessionId || `dsc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
 
     // Register session for pause/resume/cancel
@@ -127,7 +128,8 @@ export async function POST(req: NextRequest) {
                 message: pEvent.message,
                 data: pEvent.data,
               });
-            }
+            },
+            { headless }
           );
 
           if (await waitIfPaused(sessionId)) {
