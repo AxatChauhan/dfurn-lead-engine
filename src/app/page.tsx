@@ -889,6 +889,13 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchLeads();
     fetchRejectedLeads();
+
+    // Auto-refresh candidate stream every 15 seconds so sales reps see incoming leads pushed by Desktop Generator
+    const interval = setInterval(() => {
+      fetchLeads(true);
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, [selectedStage, selectedChannel, selectedCity]);
 
   // Selected Lead object
@@ -1353,6 +1360,15 @@ export default function DashboardPage() {
               <span className="hidden sm:inline">Table</span>
             </button>
           </div>
+
+          <button
+            onClick={() => fetchLeads(false)}
+            disabled={loading}
+            className="p-1.5 rounded-lg border border-[#E5E7EB] bg-white hover:bg-[#F9FAFB] text-[#374151] transition"
+            title="Refresh Leads Stream"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-[#FF7700]" : ""}`} />
+          </button>
 
           <button
             onClick={() => {
@@ -2772,6 +2788,20 @@ export default function DashboardPage() {
               {/* Form Controls (Only shown before running or when idle/finished) */}
               {!discoveryRunning && streamMetrics.stage !== "SCRAPING" && streamMetrics.stage !== "AUDITING" && (
                 <div className="space-y-4 pb-2 border-b border-[#F3F4F6]">
+                  {/* Two-Tier Operator Notice */}
+                  <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-xl p-3 flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-[#DBEAFE] text-[#1E40AF] flex items-center justify-center shrink-0 font-bold text-xs">
+                      PC
+                    </div>
+                    <div className="text-[11px] leading-relaxed text-[#1E3A8A] flex-1">
+                      <div className="font-bold text-[#1E40AF] text-xs flex items-center gap-1.5 mb-0.5">
+                        <span>High-Volume Scraping: Use Tier 1 Desktop Tool</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#1E40AF] text-white font-medium">Recommended</span>
+                      </div>
+                      Google Maps restricts automated cloud servers (Vercel datacenter IPs) with bot checks. For 100% verified phone numbers on large corridor runs, double-click <code className="bg-[#DBEAFE] px-1 py-0.5 rounded font-mono font-bold text-[#1E40AF]">run-lead-generator.bat</code> on your office workstation. Discovered leads sync directly to this screen.
+                    </div>
+                  </div>
+
                   {/* Mode Selector: 2 Mutually Exclusive Options */}
                   <div>
                     <label className="block font-semibold text-[#374151] mb-1.5">

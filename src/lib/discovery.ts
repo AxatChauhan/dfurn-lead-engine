@@ -76,22 +76,30 @@ async function getChromium(): Promise<any> {
  * Launch Chromium or Microsoft Edge safely on Windows with automatic process tracking.
  * Returns null if running in serverless cloud containers where native browser is unavailable.
  */
-async function launchBrowser(): Promise<Browser | null> {
+async function launchBrowser(options?: { headless?: boolean }): Promise<Browser | null> {
   const chrom = await getChromium();
   if (!chrom) return null;
+
+  const headless = options?.headless ?? true;
+  const launchArgs = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-blink-features=AutomationControlled",
+  ];
 
   let browser: any;
   try {
     browser = await chrom.launch({
       channel: "msedge",
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      headless,
+      args: launchArgs,
     });
   } catch {
     try {
       browser = await chrom.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        headless,
+        args: launchArgs,
       });
     } catch (e) {
       console.warn("[Discovery] Chromium launch failed:", e);
@@ -354,7 +362,8 @@ export async function searchGoogleMaps(
   city: string,
   targetCount: number = 25,
   sessionId?: string,
-  onProgress?: DiscoveryProgressCallback
+  onProgress?: DiscoveryProgressCallback,
+  options?: { headless?: boolean }
 ): Promise<CandidateResult[]> {
   const query = `${industry} in ${city}`;
   console.log(`[Google Maps Discovery] Searching for: "${query}" (Target: ${targetCount})...`);
@@ -369,7 +378,7 @@ export async function searchGoogleMaps(
 
   let browser: Browser | null = null;
   try {
-    browser = await launchBrowser();
+    browser = await launchBrowser(options);
 
     if (!browser) {
       console.log(`[Google Maps Discovery] Browser unavailable. Switching to HTTP Discovery for "${query}"...`);
@@ -390,6 +399,9 @@ export async function searchGoogleMaps(
     });
 
     const page = await context.newPage();
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    });
     const url = `https://www.google.com/maps/search/${encodeURIComponent(query)}?hl=en`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
 
