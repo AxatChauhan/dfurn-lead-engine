@@ -32,7 +32,7 @@ export default function RootLayout({
                   D'FURN
                 </span>
                 <span className="font-semibold text-sm tracking-tight text-[#111827]">
-                  Lead Engine <span className="text-[#6B7280] font-normal">· Localhost</span>
+                  Lead Engine
                 </span>
               </Link>
 
@@ -41,13 +41,13 @@ export default function RootLayout({
                   href="/"
                   className="px-3 py-1.5 text-sm font-medium rounded-md text-[#374151] hover:text-[#111827] hover:bg-[#F3F4F6]"
                 >
-                  Dashboard
+                  Leads
                 </Link>
                 <Link
                   href="/queue"
                   className="px-3 py-1.5 text-sm font-medium rounded-md text-[#374151] hover:text-[#111827] hover:bg-[#F3F4F6]"
                 >
-                  Review Queue
+                  Outreach Queue
                 </Link>
               </nav>
             </div>
@@ -55,7 +55,7 @@ export default function RootLayout({
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#059669] bg-[#ECFDF5] px-2.5 py-1 rounded-full border border-[#A7F3D0]">
                 <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse"></span>
-                <span>Port 3001 Active</span>
+                <span>Live Engine</span>
               </div>
             </div>
           </div>
@@ -65,11 +65,6 @@ export default function RootLayout({
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {children}
         </main>
-
-        {/* Compact Footer */}
-        <footer className="bg-white border-t border-[#E5E7EB] py-4 text-center text-xs text-[#6B7280]">
-          D'furn Modular Systems · Standalone Lead Engine · Zero-Cost B2B Discovery
-        </footer>
       </body>
     </html>
   );

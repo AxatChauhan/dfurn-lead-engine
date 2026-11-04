@@ -5,7 +5,11 @@ import { desc, eq, and } from "drizzle-orm";
 
 function escapeCsvCell(val: any): string {
   if (val === null || val === undefined) return '""';
-  const str = String(val).trim();
+  let str = String(val).trim();
+  // Edge Case EC-22: Formula injection defense for Excel (prefix =, +, -, @ with apostrophe)
+  if (/^[=+\-@]/.test(str)) {
+    str = `'${str}`;
+  }
   // If string contains comma, quote, or newline, escape it
   if (str.includes('"') || str.includes(",") || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
@@ -37,8 +41,8 @@ export async function GET(req: NextRequest) {
 
     const query = db.select().from(candidates);
     const rows = conditions.length > 0
-      ? query.where(and(...conditions)).orderBy(desc(candidates.createdAt)).all()
-      : query.orderBy(desc(candidates.createdAt)).all();
+      ? await query.where(and(...conditions)).orderBy(desc(candidates.createdAt))
+      : await query.orderBy(desc(candidates.createdAt));
 
     const headers = [
       "Lead ID",
@@ -75,28 +79,28 @@ export async function GET(req: NextRequest) {
       const line = [
         escapeCsvCell(r.id),
         escapeCsvCell(r.businessName),
-        escapeCsvCell(r.contactPerson || "–"),
-        escapeCsvCell(r.phone || "–"),
-        escapeCsvCell(r.email || "–"),
-        escapeCsvCell(r.city || "–"),
-        escapeCsvCell(r.state || "–"),
+        escapeCsvCell(r.contactPerson || "-"),
+        escapeCsvCell(r.phone || "-"),
+        escapeCsvCell(r.email || "-"),
+        escapeCsvCell(r.city || "-"),
+        escapeCsvCell(r.state || "-"),
         escapeCsvCell(r.category || "Commercial Office"),
         escapeCsvCell(r.projectType || "Modular Workstations"),
-        escapeCsvCell(r.workstationCount ?? "–"),
+        escapeCsvCell(r.workstationCount ?? "-"),
         escapeCsvCell(r.hasFloorPlan ? "Yes" : "No"),
-        escapeCsvCell(r.projectTimeline || "–"),
-        escapeCsvCell(r.estimatedBudget || "–"),
+        escapeCsvCell(r.projectTimeline || "-"),
+        escapeCsvCell(r.estimatedBudget || "-"),
         escapeCsvCell(r.leadSource || "paid_ads"),
-        escapeCsvCell(r.campaignName || "–"),
-        escapeCsvCell(r.utmSource || "–"),
-        escapeCsvCell(r.utmMedium || "–"),
-        escapeCsvCell(r.utmCampaign || "–"),
+        escapeCsvCell(r.campaignName || "-"),
+        escapeCsvCell(r.utmSource || "-"),
+        escapeCsvCell(r.utmMedium || "-"),
+        escapeCsvCell(r.utmCampaign || "-"),
         escapeCsvCell(r.qualificationStage || "NEW"),
-        escapeCsvCell(r.operatorNotes || r.reasoning || "–"),
-        escapeCsvCell(r.createdAt ? new Date(r.createdAt).toISOString().split("T")[0] : "–"),
+        escapeCsvCell(r.operatorNotes || r.reasoning || "-"),
+        escapeCsvCell(r.createdAt ? new Date(r.createdAt).toISOString().split("T")[0] : "-"),
         escapeCsvCell(r.status === "SYNCED_TO_ERP" ? "SYNCED" : "PENDING"),
-        escapeCsvCell(r.erpEnquiryCode || "–"),
-        escapeCsvCell(r.erpClientCode || "–"),
+        escapeCsvCell(r.erpEnquiryCode || "-"),
+        escapeCsvCell(r.erpClientCode || "-"),
       ];
       csvLines.push(line.join(","));
     }

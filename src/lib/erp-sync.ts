@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { candidates, erpSyncLogs } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { logCandidateEvent } from "@/lib/events";
 
 export interface ErpSyncPayload {
   candidateId: string;
@@ -15,11 +16,10 @@ export interface ErpSyncResult {
 }
 
 export async function pushCandidateToErp(candidateId: string): Promise<ErpSyncResult> {
-  const candidate = db
+  const [candidate] = await db
     .select()
     .from(candidates)
-    .where(eq(candidates.id, candidateId))
-    .get();
+    .where(eq(candidates.id, candidateId));
 
   if (!candidate) {
     return { success: false, message: "Candidate not found" };
@@ -105,15 +105,15 @@ export async function pushCandidateToErp(candidateId: string): Promise<ErpSyncRe
 
     if (!res.ok) {
       const errMsg = data.error || "Failed to intake lead into D'furn ERP";
-      logSync(candidate.id, null, null, payload, data, "FAILED", errMsg);
+      await logSync(candidate.id, null, null, payload, data, "FAILED", errMsg);
       return { success: false, message: errMsg };
     }
 
     const enquiryCode = data.enquiry?.code || data.enquiry?.enquiryNumber || "DF_ENQ";
     const clientCode = data.client?.clientCode || null;
 
-    // Update candidate in local DB
-    db.update(candidates)
+    // Update candidate in PostgreSQL
+    await db.update(candidates)
       .set({
         status: "SYNCED_TO_ERP",
         qualificationStage: "CONVERTED",
@@ -122,10 +122,18 @@ export async function pushCandidateToErp(candidateId: string): Promise<ErpSyncRe
         erpClientCode: clientCode,
         updatedAt: new Date(),
       })
-      .where(eq(candidates.id, candidateId))
-      .run();
+      .where(eq(candidates.id, candidateId));
 
-    logSync(candidate.id, enquiryCode, clientCode, payload, data, "SUCCESS");
+    await logSync(candidate.id, enquiryCode, clientCode, payload, data, "SUCCESS");
+
+    await logCandidateEvent({
+      candidateId: candidate.id,
+      eventType: "ERP_SYNCED",
+      title: `Pushed to D'furn ERP (${enquiryCode})`,
+      description: `Client Code: ${clientCode || "Existing"} · Enquiry: ${enquiryCode}`,
+      channel: "ERP",
+      metadata: { enquiryCode, clientCode },
+    });
 
     return {
       success: true,
@@ -135,12 +143,12 @@ export async function pushCandidateToErp(candidateId: string): Promise<ErpSyncRe
     };
   } catch (error: any) {
     const errMsg = error.message || "Network error connecting to local D'furn ERP";
-    logSync(candidate.id, null, null, payload, {}, "FAILED", errMsg);
+    await logSync(candidate.id, null, null, payload, {}, "FAILED", errMsg);
     return { success: false, message: errMsg };
   }
 }
 
-function logSync(
+async function logSync(
   candidateId: string,
   erpEnquiryCode: string | null,
   erpClientCode: string | null,
@@ -150,19 +158,18 @@ function logSync(
   errorMessage?: string
 ) {
   try {
-    db.insert(erpSyncLogs)
+    await db.insert(erpSyncLogs)
       .values({
         id: `sync_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         candidateId,
         erpEnquiryCode: erpEnquiryCode || undefined,
         erpClientCode: erpClientCode || undefined,
-        payload: JSON.stringify(payload),
-        response: JSON.stringify(response),
+        payload,
+        response,
         status,
         errorMessage: errorMessage || null,
         syncedAt: new Date(),
-      })
-      .run();
+      });
   } catch (err) {
     console.error("[ERP Sync Logger] Error:", err);
   }

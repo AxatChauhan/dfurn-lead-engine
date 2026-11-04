@@ -40,3 +40,6 @@ data/*.db-wal
 
 .vercel
 .env*
+
+# Agent internal teamwork
+.agents/

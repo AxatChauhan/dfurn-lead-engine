@@ -25,6 +25,10 @@ export interface CopywritingOutput {
   evidenceAnchors: string[];
 }
 
+/**
+ * Generates 100% Online Specifier Copywriting
+ * Strictly zero em dashes · Strictly zero physical mailer references.
+ */
 export function generateModularOutreach(input: CopywritingInput): CopywritingOutput {
   const firm = input.businessName;
   const name = input.contactName || "Team";
@@ -55,37 +59,35 @@ Commercial contractors often struggle with on-site carpentry delays, edge-bandin
 2. 282 Master Product Configurations: Linear workstations, 120-degree clusters, executive cabins, and acoustic pods.
 3. 18% GST Compliant B2B Billing: Direct OEM wholesale rates with complete tax input credit.
 
-If you have an active floor plan or upcoming corporate fitout, we can turnaround a comprehensive CAD and BOM costing within 48 hours to help you optimize your project margin.
+If you have an active floor plan or upcoming corporate fitout, we can turnaround a comprehensive CAD and BOM costing within 24 hours to help you optimize your project margin.
 
 Would you be open to a 5-minute introductory call this week?
 
 Warm regards,
 D'furn Modular Systems
-Manufacturing Facility & Design Studio
-Contact: +91 98765 43210 · dfurn.com`;
+Manufacturing Facility: Kheda · Corporate Office: Bodakdev, Ahmedabad
+Contact: +91 98250 88990 · https://dfurn.in`;
   } else {
-    // Architect / Interior Designer
-    whatsAppMessage = `Hi ${name}, love the refined interior aesthetics ${firm} delivers in ${city}. I am from D'furn Modular Systems. We partner with architects to manufacture precision modular furniture, custom workstations, and prelam cabinetry directly from our factory. We would love to send a complimentary Architect Material & Finish Swatch Box (Laminates, Edge Bands & Powder Coated Profiles) to your studio desk. Would this week work for a quick drop-off?`;
+    // Commercial Architect / Interior Designer (100% Online CAD & BOQ Hook)
+    whatsAppMessage = `Hi ${name}, admired ${firm}'s workplace design projects in ${city}. Reaching out from D'furn Modular Systems. We operate a 48,000 sq ft contract modular furniture plant in Kheda and have published our complete 2026 Commercial Workstation CAD/BIM block library (.DWG & .RFA): https://dfurn.in/specifiers/cad-library . We also offer a free 24-hour factory BOQ turnaround for active layouts. Would you like direct access for your drafting team?`;
 
-    emailSubject = `Architect Finish Swatch Box for ${firm} · D'furn Modular Systems`;
+    emailSubject = `AutoCAD & Revit blocks for ${firm}'s commercial layouts · D'furn Modular Systems`;
     emailBody = `Dear ${name},
 
 We have been admiring the refined architectural work that ${firm} has completed in ${city}.
 
-As an architectural studio, delivering flawless edge-banding and precision factory finishes without relying on erratic on-site carpenters is essential for client delight. D'furn Modular Systems partners directly with architects as an OEM specification partner:
+As an architectural studio, delivering flawless modular workstations and precision factory finishes without relying on erratic on-site carpenters is essential for corporate client delight. D'furn Modular Systems partners directly with commercial architects as an OEM specification partner:
 
-1. Bespoke Specification Support: 48-hour 3D CAD modeling and detailed BOM costing for your client presentations.
-2. Complete Catalog Swatches: Over 120 standard laminates, acoustic felt finishes, and architectural powder-coated aluminum extrusions.
-3. Factory Precision: Zero manual trimming, seamless PUR edge-banding, and modular assembly.
+1. Ready-to-Drop CAD & BIM Blocks: Native 2D AutoCAD (.dwg) and 3D Revit (.rfa) workstation families with integrated wire raceway specifications (https://dfurn.in/specifiers/cad-library).
+2. 24-Hour Factory BOQ Costing: Send any active floor plan, and our engineering team returns an itemized component BOQ with 3D elevations within 24 hours - zero cost, no obligation.
+3. German Homag Edge-Banding: Automated PUR edge-banding with zero manual trimming and direct-from-plant 14-day dispatch.
 
-We would like to courier our complimentary Architect Swatch Kit directly to your studio desk so you have physical samples on hand for your next client discussion.
-
-Could you confirm the best studio address for delivery?
+If you have an active corporate layout in development, feel free to reply with a PDF or DWG layout for rapid pricing.
 
 Warm regards,
 D'furn Modular Systems
-Factory & Studio Experience Centre
-Direct: +91 98765 43210 · dfurn.com`;
+Manufacturing Plant: Kheda · Corporate Office: Bodakdev, Ahmedabad
+Direct: +91 98250 88990 · https://dfurn.in`;
   }
 
   // Format WhatsApp Link
@@ -98,12 +100,10 @@ Direct: +91 98765 43210 · dfurn.com`;
 
   const coldCallScript = {
     opener: `Good morning, am I speaking with ${name} at ${firm}? Hi, my name is Rahul from D'furn Modular Systems in ${city}.`,
-    hook: isContractor
-      ? `We supply factory-finished modular workstations and executive desks to commercial fitout contractors to eliminate on-site carpentry delays. I noticed your recent commercial projects and wanted to see how you currently handle modular furniture fabrication.`
-      : `We are an OEM factory manufacturing modular office furniture and cabinetry for architects. We are sending out our new 2026 Material Swatch Boxes to select design studios in ${city} and wanted to confirm where to dispatch your kit.`,
-    objectionCarpenter: `I completely understand you have carpenters on site. Most of our contractor partners do too for civil work, but they use our factory for workstations and prelam panels because our machines produce 100 desks in 3 days with laser-straight edges that on-site hand routers simply cannot match.`,
-    objectionCatalog: `I will send our digital catalog right now to this WhatsApp number. Take 30 seconds to look at the workstation profiles, and if you have an active floor plan, we will price it out within 24 hours.`,
-    close: `May I confirm the best email and WhatsApp number to send the specifications right over?`,
+    hook: `We noticed ${firm}'s commercial office projects and wanted to share our free AutoCAD and Revit BIM workstation library to save your drafting team time on active layouts.`,
+    objectionCarpenter: `Understood. Most studios keep carpenters for civil gypsum, but specify our factory for modular desking because our German beam saws produce 100 workstations in 3 days with zero manual trimming errors.`,
+    objectionCatalog: `I can send our instant 2D/3D CAD library link and 2026 lookbook directly over WhatsApp right now so your team has it on file.`,
+    close: `Would it be helpful if I shared our 24-hour BOQ template on WhatsApp?`
   };
 
   return {

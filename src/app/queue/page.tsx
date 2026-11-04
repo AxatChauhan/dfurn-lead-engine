@@ -3,18 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Send,
   MessageSquare,
   Mail,
   CheckCircle2,
   Copy,
-  ExternalLink,
-  RefreshCw,
-  Phone,
-  Building2,
   ArrowRight,
-  Sparkles,
-  Check
+  Check,
+  RefreshCw,
 } from "lucide-react";
 
 interface OutreachItem {
@@ -40,43 +35,16 @@ export default function ReviewQueuePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   const fetchQueue = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/candidates");
+      const res = await fetch("/api/queue");
       const data = await res.json();
-
-      if (data.candidates) {
-        // Collect messages across candidates
-        const items: OutreachItem[] = [];
-        for (const cand of data.candidates) {
-          const detailRes = await fetch(`/api/candidates/${cand.id}`);
-          const detail = await detailRes.json();
-          if (detail.messages) {
-            for (const msg of detail.messages) {
-              if (msg.approvalStatus === "draft_pending_review") {
-                items.push({
-                  id: msg.id,
-                  candidateId: cand.id,
-                  candidateName: cand.businessName,
-                  category: cand.category,
-                  city: cand.city,
-                  phone: cand.phone,
-                  email: cand.email,
-                  leadTier: cand.leadTier,
-                  totalScore: cand.totalScore,
-                  channel: msg.channel,
-                  subject: msg.subject,
-                  bodyContent: msg.bodyContent,
-                  approvalStatus: msg.approvalStatus,
-                  whatsappAvailable: cand.whatsappAvailable,
-                });
-              }
-            }
-          }
-        }
-        setMessages(items);
+      if (data.queue) {
+        setMessages(data.queue);
       }
     } catch (err) {
       console.error("Error loading queue:", err);
@@ -95,9 +63,37 @@ export default function ReviewQueuePage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleMarkSent = async (item: OutreachItem) => {
+  const handleMessageEdit = (id: string, newText: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, bodyContent: newText } : m))
+    );
+  };
+
+  const handleSaveMessage = async (item: OutreachItem) => {
+    try {
+      setSavingId(item.id);
+      await fetch(`/api/candidates/${item.candidateId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_message",
+          messageId: item.id,
+          bodyContent: item.bodyContent,
+        }),
+      });
+      setSavedId(item.id);
+      setTimeout(() => setSavedId(null), 2500);
+    } catch (err) {
+      console.error("Error saving draft message:", err);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleWhatsAppAction = async (item: OutreachItem) => {
     try {
       setActingId(item.id);
+      // Mark message approved & sent
       await fetch(`/api/candidates/${item.candidateId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -108,19 +104,19 @@ export default function ReviewQueuePage() {
         }),
       });
 
-      // Also update candidate status to CONTACTED
+      // Update candidate stage to CONTACTED & record timestamp
       await fetch(`/api/candidates/${item.candidateId}`, {
-        method: "POST",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "update_status",
-          status: "CONTACTED",
+          qualificationStage: "CONTACTED",
+          markContacted: true,
         }),
       });
 
       setMessages((prev) => prev.filter((m) => m.id !== item.id));
     } catch (err) {
-      alert("Error marking message sent");
+      console.error("Error updating outreach queue status:", err);
     } finally {
       setActingId(null);
     }
@@ -133,14 +129,14 @@ export default function ReviewQueuePage() {
       {/* Header */}
       <div className="bg-white p-6 rounded-xl border border-[#E5E7EB] shadow-xs">
         <h1 className="text-2xl font-bold tracking-tight text-[#111827]">
-          Human Outreach Review Queue
+          Outreach Queue
         </h1>
         <p className="text-sm text-[#4B5563] mt-1">
-          Review, approve, and launch personalized WhatsApp & Email conversations. No messages leave automatically.
+          Review and dispatch personalized WhatsApp and email outreach to qualified leads.
         </p>
       </div>
 
-      {/* Channel Tabs (Black Active State) */}
+      {/* Channel Tabs (Strictly Black Active State) */}
       <div className="flex items-center gap-2 border-b border-[#E5E7EB] pb-3">
         <button
           onClick={() => setActiveChannel("WHATSAPP")}
@@ -149,7 +145,7 @@ export default function ReviewQueuePage() {
           }`}
         >
           <MessageSquare className="w-4 h-4" />
-          <span>WhatsApp Drafts ({messages.filter((m) => m.channel === "WHATSAPP").length})</span>
+          <span>WhatsApp ({messages.filter((m) => m.channel === "WHATSAPP").length})</span>
         </button>
         <button
           onClick={() => setActiveChannel("EMAIL")}
@@ -158,44 +154,46 @@ export default function ReviewQueuePage() {
           }`}
         >
           <Mail className="w-4 h-4" />
-          <span>Email Pitches ({messages.filter((m) => m.channel === "EMAIL").length})</span>
+          <span>Email ({messages.filter((m) => m.channel === "EMAIL").length})</span>
         </button>
       </div>
 
-      {/* Queue Feed */}
+      {/* Queue Stream */}
       {loading ? (
-        <div className="py-20 text-center text-[#6B7280]">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#FF7700]" />
-          Loading approval queue...
+        <div className="p-12 text-center bg-white rounded-xl border border-[#E5E7EB]">
+          <RefreshCw className="w-6 h-6 animate-spin text-[#6B7280] mx-auto" />
+          <p className="text-sm text-[#6B7280] mt-2">Loading outreach candidates...</p>
         </div>
       ) : filteredMessages.length === 0 ? (
-        <div className="bg-white p-12 rounded-xl border border-[#E5E7EB] text-center">
-          <CheckCircle2 className="w-12 h-12 text-[#10B981] mx-auto mb-3" />
-          <h3 className="text-base font-bold text-[#111827]">Queue Clear</h3>
-          <p className="text-sm text-[#6B7280] mt-1">
-            All generated drafts for {activeChannel === "WHATSAPP" ? "WhatsApp" : "Email"} have been reviewed and dispatched.
+        <div className="p-12 text-center bg-white rounded-xl border border-[#E5E7EB] space-y-3">
+          <CheckCircle2 className="w-12 h-12 text-[#10B981] mx-auto" />
+          <h3 className="font-semibold text-base text-[#111827]">All Caught Up</h3>
+          <p className="text-sm text-[#6B7280] max-w-sm mx-auto">
+            Zero pending drafts awaiting approval in this channel.
           </p>
-          <Link href="/" className="btn-secondary mt-4 text-xs">
-            Return to Dashboard
-          </Link>
+          <div className="pt-2">
+            <Link href="/" className="btn-secondary text-xs inline-flex items-center gap-1.5">
+              <span>View All Leads</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
           {filteredMessages.map((item) => {
-            const phoneDigits = (item.phone || "").replace(/\D/g, "");
-            let cleanPhone = phoneDigits;
-            if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
-            const waUrl = cleanPhone.length >= 10
-              ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(item.bodyContent)}`
-              : "";
+            const rawPhoneDigits = (item.phone || "").replace(/\D/g, "");
+            const waNumber = rawPhoneDigits.length === 10 ? `91${rawPhoneDigits}` : rawPhoneDigits;
+            const waUrl = waNumber
+              ? `https://web.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(item.bodyContent)}`
+              : null;
 
             return (
               <div
                 key={item.id}
-                className="bg-white p-6 rounded-xl border border-[#E5E7EB] shadow-xs space-y-4"
+                className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-xs space-y-4 hover:border-[#D1D5DB] transition"
               >
-                {/* Top Row: Firm Meta */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E5E7EB] pb-3">
+                {/* Candidate Meta Header */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F3F4F6] pb-3">
                   <div>
                     <div className="flex items-center gap-2">
                       <Link
@@ -231,25 +229,42 @@ export default function ReviewQueuePage() {
                   </div>
                 </div>
 
-                {/* Message Content Preview */}
-                <div className="space-y-2">
+                {/* Editable Message Box */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-[#6B7280]">
+                    <span className="font-semibold text-[#374151] flex items-center gap-1.5">
+                      <span>Outreach Message Draft (Editable)</span>
+                      {savedId === item.id && (
+                        <span className="text-[10px] font-bold text-[#059669] bg-[#ECFDF5] px-1.5 py-0.5 rounded border border-[#A7F3D0]">
+                          Saved ✓
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11px] font-mono">{item.bodyContent.length} chars</span>
+                  </div>
+
                   {item.subject ? (
                     <div className="text-xs font-semibold text-[#111827]">
                       Subject: <span className="font-normal text-[#374151]">{item.subject}</span>
                     </div>
                   ) : null}
 
-                  <div className="p-4 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB] text-sm text-[#1F2937] whitespace-pre-line leading-relaxed font-sans">
-                    {item.bodyContent}
-                  </div>
+                  <textarea
+                    rows={5}
+                    value={item.bodyContent}
+                    onChange={(e) => handleMessageEdit(item.id, e.target.value)}
+                    onBlur={() => handleSaveMessage(item)}
+                    className="w-full p-3.5 rounded-lg bg-[#F9FAFB] border border-[#D1D5DB] focus:bg-white focus:border-[#000000] focus:ring-1 focus:ring-[#000000] text-xs text-[#1F2937] leading-relaxed font-sans transition resize-y"
+                    placeholder="Customize your outreach message..."
+                  />
                 </div>
 
-                {/* Actions Footer */}
+                {/* Actions Footer: Copy + Save Draft + WhatsApp */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleCopy(item.id, item.bodyContent)}
-                      className="btn-secondary text-xs px-3 py-1.5"
+                      className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
                     >
                       {copiedId === item.id ? (
                         <>
@@ -259,8 +274,29 @@ export default function ReviewQueuePage() {
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" />
-                          <span>Copy Text</span>
+                          <span>Copy</span>
                         </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleSaveMessage(item)}
+                      disabled={savingId === item.id}
+                      className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 text-[#374151]"
+                      title="Save customized message edits"
+                    >
+                      {savingId === item.id ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : savedId === item.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-[#059669]" />
+                          <span className="text-[#059669]">Saved</span>
+                        </>
+                      ) : (
+                        <span>Save Draft</span>
                       )}
                     </button>
                   </div>
@@ -271,26 +307,13 @@ export default function ReviewQueuePage() {
                         href={waUrl}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={() => handleMarkSent(item)}
-                        className="bg-[#25D366] hover:bg-[#20BA5A] text-white text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5 shadow-xs transition"
+                        onClick={() => handleWhatsAppAction(item)}
+                        className="bg-[#25D366] hover:bg-[#20BA5A] text-white text-xs font-semibold px-3.5 py-1.5 rounded-md flex items-center gap-1.5 shadow-xs transition"
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Launch WhatsApp Web ↗</span>
+                        <span>WhatsApp</span>
                       </a>
                     ) : null}
-
-                    <button
-                      onClick={() => handleMarkSent(item)}
-                      disabled={actingId === item.id}
-                      className="btn-primary text-xs px-3 py-1.5"
-                    >
-                      {actingId === item.id ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5" />
-                      )}
-                      <span>Mark Sent & Archive</span>
-                    </button>
                   </div>
                 </div>
               </div>

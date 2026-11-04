@@ -172,7 +172,7 @@ export default function CandidateDetailPage() {
               ) : (
                 <Send className="w-3.5 h-3.5" />
               )}
-              <span>Push to D'furn ERP (Port 3000)</span>
+              <span>Push to ERP</span>
             </button>
           )}
         </div>
@@ -456,7 +456,7 @@ export default function CandidateDetailPage() {
                 <div>
                   <span className="font-bold text-[#111827] uppercase">Observation Hook:</span>
                   <p className="text-[#374151] mt-0.5">
-                    "We manufacture precision factory modular workstations and prelam panels for architects in {candidate.city}. We are dispatching our complimentary 2026 Material Swatch Boxes and wanted to confirm your studio delivery address."
+                    "We manufacture precision factory modular workstations and prelam panels for commercial architects in {candidate.city}. We maintain a free AutoCAD/Revit BIM workstation library and 24-hour factory BOQ service for commercial layouts and wanted to share direct access with your drafting team."
                   </p>
                 </div>
                 <div>

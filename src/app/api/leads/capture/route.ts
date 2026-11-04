@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { candidates } from "@/db/schema";
+import { candidates, rejectedLeads, candidateEvents } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-function normalizeIndianPhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 10) return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
-  if (digits.length === 12 && digits.startsWith("91")) {
-    return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
-  }
-  return raw.trim();
-}
+import { sanitizeIndianPhone } from "@/lib/discovery";
+import { isSuspiciousDummyPhone, isResidentialMismatch } from "@/lib/qualification";
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,23 +28,51 @@ export async function POST(req: NextRequest) {
     const utmCampaign = body.utmCampaign || body.utm_campaign || undefined;
     const notes = body.notes || body.requirementDetails || undefined;
 
+    const displayName = businessName || contactPerson || `Lead from ${city}`;
+
+    // 1. Strict Residential Filter: Route explicit residential projects to rejected_leads
+    const scopeCheckText = `${projectType} ${notes || ""} ${category}`;
+    if (isResidentialMismatch(scopeCheckText)) {
+      const rejectId = `rej_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      await db.insert(rejectedLeads).values({
+        id: rejectId,
+        businessName: displayName,
+        contactPerson: contactPerson || undefined,
+        phone: rawPhone || undefined,
+        email,
+        city,
+        leadSource,
+        category: "Residential Decorator",
+        rejectionReason: "RESIDENTIAL_MISMATCH",
+        notes: notes || `Project type '${projectType}' does not align with commercial modular furniture`,
+        rawPayload: body,
+        rejectedAt: new Date(),
+      });
+
+      return NextResponse.json({
+        success: true,
+        rejected: true,
+        rejectId,
+        message: "Submission identified as residential mismatch and preserved in Rejected Leads.",
+      }, { status: 200 });
+    }
+
     if (!rawPhone) {
       return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
     }
 
-    const phone = normalizeIndianPhone(rawPhone);
-    const displayName = businessName || contactPerson || `Lead from ${city}`;
+    const isDummyPhone = isSuspiciousDummyPhone(rawPhone);
+    const phone = sanitizeIndianPhone(rawPhone) || rawPhone;
 
     // Dedup check by phone
-    const existing = db
+    const [existing] = await db
       .select()
       .from(candidates)
-      .where(eq(candidates.phone, phone))
-      .get();
+      .where(eq(candidates.phone, phone));
 
     if (existing) {
       // Update existing lead with latest campaign touchpoint
-      db.update(candidates)
+      await db.update(candidates)
         .set({
           operatorNotes: notes
             ? `${existing.operatorNotes ? existing.operatorNotes + " · " : ""}[New Ad Submit]: ${notes}`
@@ -59,10 +80,22 @@ export async function POST(req: NextRequest) {
           campaignName: campaignName || existing.campaignName,
           workstationCount: workstationCount ?? existing.workstationCount,
           hasFloorPlan: hasFloorPlan || existing.hasFloorPlan,
+          isDummyPhone: isDummyPhone || existing.isDummyPhone,
           updatedAt: new Date(),
         })
-        .where(eq(candidates.id, existing.id))
-        .run();
+        .where(eq(candidates.id, existing.id));
+
+      await db.insert(candidateEvents).values({
+        id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        candidateId: existing.id,
+        eventType: "LEAD_RE_ENGAGED",
+        title: "Re-engaged via Ad Campaign",
+        description: `Submitted new form via campaign: ${campaignName || "Paid Ad"}`,
+        channel: leadSource.includes("google") ? "GOOGLE_ADS" : "META_ADS",
+        metadata: { campaignName, utmSource, workstationCount },
+        actor: "Ad Webhook",
+        createdAt: new Date(),
+      });
 
       return NextResponse.json({
         success: true,
@@ -74,7 +107,7 @@ export async function POST(req: NextRequest) {
 
     const leadId = `lead_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-    db.insert(candidates)
+    await db.insert(candidates)
       .values({
         id: leadId,
         businessName: displayName,
@@ -95,23 +128,40 @@ export async function POST(req: NextRequest) {
         utmMedium,
         utmCampaign,
         qualificationStage: "NEW",
-        operatorNotes: notes || `Direct ad inquiry for ${projectType} in ${city}`,
-        whatsappAvailable: true,
+        operatorNotes: notes || (isDummyPhone ? "[DUMMY SUBMISSION]: Incomplete or suspicious phone number submitted" : `Direct ad inquiry for ${projectType} in ${city}`),
+        whatsappAvailable: !isDummyPhone,
         hasCommercialFocus: true,
+        isDummyPhone,
+        enrichmentStatus: "NONE",
         status: "NEW",
-        totalScore: 80,
-        leadTier: "A",
+        totalScore: isDummyPhone ? 40 : 85,
+        leadTier: isDummyPhone ? "C" : "A",
         createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .run();
+      });
+
+    // Insert chronological timeline event
+    await db.insert(candidateEvents).values({
+      id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      candidateId: leadId,
+      eventType: "LEAD_CAPTURED",
+      title: isDummyPhone ? "Ad Form Submitted (Flagged Dummy Phone)" : "Inbound Ad Lead Ingested",
+      description: `Campaign: ${campaignName || "Direct Ad"} · Scope: ${projectType} (${workstationCount ? workstationCount + " seats" : "General"})`,
+      channel: leadSource.includes("google") ? "GOOGLE_ADS" : "META_ADS",
+      metadata: { campaignName, utmSource, utmMedium, isDummyPhone },
+      actor: "Ad Webhook",
+      createdAt: new Date(),
+    });
 
     return NextResponse.json(
       {
         success: true,
         isExisting: false,
         leadId,
-        message: "New ad lead captured successfully",
+        isDummyPhone,
+        message: isDummyPhone
+          ? "Lead captured with dummy phone flag in Ads section"
+          : "New commercial ad lead captured successfully",
       },
       { status: 201 }
     );

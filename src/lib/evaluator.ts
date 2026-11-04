@@ -26,7 +26,7 @@ export interface ScoringOutput {
 }
 
 export function evaluateModularLeadScore(input: ScoringInput): ScoringOutput {
-  // 1. Fit Score (0–100)
+  // 1. Fit Score (0 to 100)
   let fitScore = 40;
   const cat = (input.category || "").toLowerCase();
   if (cat.includes("architect")) fitScore = 95;
@@ -34,14 +34,14 @@ export function evaluateModularLeadScore(input: ScoringInput): ScoringOutput {
   else if (cat.includes("interior")) fitScore = 85;
   else if (cat.includes("coworking")) fitScore = 80;
 
-  // 2. Commercial Scale Score (0–100)
+  // 2. Commercial Scale Score (0 to 100)
   let scaleScore = 20;
   if (input.hasCommercialFocus) scaleScore += 40;
   if (input.portfolioTags && input.portfolioTags.includes("Commercial Office")) scaleScore += 25;
   if (input.portfolioTags && input.portfolioTags.includes("Turnkey Fitout")) scaleScore += 15;
   scaleScore = Math.min(100, scaleScore);
 
-  // 3. Activity Score (0–100)
+  // 3. Activity Score (0 to 100)
   let activityScore = 30;
   if (input.website && !input.website.includes("facebook.com")) activityScore += 20;
   if (input.rating && input.rating >= 4.0) activityScore += 20;
@@ -49,18 +49,25 @@ export function evaluateModularLeadScore(input: ScoringInput): ScoringOutput {
   if (input.reviewCount && input.reviewCount >= 30) activityScore += 10;
   activityScore = Math.min(100, activityScore);
 
-  // 4. Accessibility Score (0–100)
+  // 4. Accessibility Score (0 to 100)
   let accessibilityScore = 10;
   if (input.phone) accessibilityScore += 35;
   if (input.whatsappAvailable) accessibilityScore += 25;
   if (input.email) accessibilityScore += 30;
   accessibilityScore = Math.min(100, accessibilityScore);
 
-  // 5. OEM Synergy Score (0–100)
+  // 5. OEM Synergy Score (0 to 100)
   let synergyScore = 30;
   if (input.portfolioTags && input.portfolioTags.includes("Modular Workstations")) synergyScore += 40;
   if (input.portfolioTags && input.portfolioTags.includes("Turnkey Fitout")) synergyScore += 30;
   synergyScore = Math.min(100, synergyScore);
+
+  // Residential penalty: if portfolio strictly features residential and lacks commercial focus
+  if (input.hasCommercialFocus === false) {
+    fitScore = Math.min(fitScore, 25);
+    scaleScore = Math.min(scaleScore, 20);
+    synergyScore = Math.min(synergyScore, 15);
+  }
 
   // Weighted Total Calculation
   const totalScore = Math.round(
@@ -86,7 +93,7 @@ export function evaluateModularLeadScore(input: ScoringInput): ScoringOutput {
   if (input.whatsappAvailable) reasons.push("Direct WhatsApp channel confirmed");
   if (input.reviewCount && input.reviewCount > 15) reasons.push(`Established presence (${input.reviewCount} reviews)`);
 
-  let recommendedHook = "architect_swatch_box";
+  let recommendedHook = "architect_cad_bim_library";
   if (cat.includes("contractor") || cat.includes("fitout")) {
     recommendedHook = "contractor_overflow_capacity";
   } else if (cat.includes("coworking")) {
