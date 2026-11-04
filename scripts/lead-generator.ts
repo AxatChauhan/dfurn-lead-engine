@@ -55,31 +55,14 @@ interface GeneratorOptions {
   runAudit: boolean;
 }
 
-const PRESET_PERSONAS = [
-  "Commercial Architects & Interior Designers",
-  "Turnkey Fitout Contractors",
-  "Corporate Office Specifiers & Coworking Builders",
-];
-
-const PRESET_CORRIDORS = [
-  "Bodakdev & Sindhu Bhavan Road, Ahmedabad",
-  "Prahlad Nagar & SG Highway, Ahmedabad",
-  "GIFT City & Gandhinagar SEZ",
-  "CG Road & Navrangpura, Ahmedabad",
-  "Science City & Sola, Ahmedabad",
-  "Vesu & Diamond Bourse, Surat",
-  "Alkapuri & Gotri, Vadodara",
-  "ALL_AHMEDABAD_CORRIDORS",
-];
-
 function parseCliArgs(): Partial<GeneratorOptions> {
   const args = process.argv.slice(2);
   const options: Partial<GeneratorOptions> = {};
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--persona" && args[i + 1]) options.persona = args[++i];
-    else if (arg === "--corridor" && args[i + 1]) options.corridor = args[++i];
+    if ((arg === "--persona" || arg === "--industry" || arg === "--query") && args[i + 1]) options.persona = args[++i];
+    else if ((arg === "--corridor" || arg === "--location" || arg === "--city") && args[i + 1]) options.corridor = args[++i];
     else if (arg === "--count" && args[i + 1]) options.count = parseInt(args[++i], 10);
     else if (arg === "--headless") options.headless = args[++i] !== "false";
     else if (arg === "--no-audit") options.runAudit = false;
@@ -99,22 +82,17 @@ async function promptOptions(): Promise<GeneratorOptions> {
   console.log("===============================================================================");
   console.log("");
 
-  // 1. Persona
-  console.log("Select Target Persona:");
-  PRESET_PERSONAS.forEach((p, idx) => console.log(`  [${idx + 1}] ${p}`));
-  const personaChoice = await rl.question("\nChoose persona (1-3, default 1): ");
-  const pIdx = parseInt(personaChoice.trim(), 10) - 1;
-  const persona = PRESET_PERSONAS[pIdx] || PRESET_PERSONAS[0];
+  // 1. Specifier Query
+  const personaChoice = await rl.question(
+    "Enter Specifier Profession / Trade Query\n(default: Commercial Architects & Interior Designers): "
+  );
+  const persona = personaChoice.trim() || "Commercial Architects & Interior Designers";
 
-  // 2. Corridor
-  console.log("\nSelect Prime Corridor:");
-  PRESET_CORRIDORS.forEach((c, idx) => {
-    const label = c === "ALL_AHMEDABAD_CORRIDORS" ? "All Ahmedabad Prime Corridors (Multi-corridor run)" : c;
-    console.log(`  [${idx + 1}] ${label}`);
-  });
-  const corridorChoice = await rl.question("\nChoose corridor (1-8, default 1): ");
-  const cIdx = parseInt(corridorChoice.trim(), 10) - 1;
-  const corridor = PRESET_CORRIDORS[cIdx] || PRESET_CORRIDORS[0];
+  // 2. Location Query
+  const corridorChoice = await rl.question(
+    "\nEnter Target Location, Road, or City Micro-Market\n(default: Sindhu Bhavan Road, Ahmedabad): "
+  );
+  const corridor = corridorChoice.trim() || "Sindhu Bhavan Road, Ahmedabad";
 
   // 3. Count
   const countChoice = await rl.question("\nTarget Lead Count (default 15): ");
@@ -141,7 +119,7 @@ export async function runLeadGenerator() {
 
   if (cliArgs.corridor && cliArgs.count) {
     options = {
-      persona: cliArgs.persona || PRESET_PERSONAS[0],
+      persona: cliArgs.persona || "Commercial Architects & Interior Designers",
       corridor: cliArgs.corridor,
       count: cliArgs.count,
       headless: cliArgs.headless !== false,

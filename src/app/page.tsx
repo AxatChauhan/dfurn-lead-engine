@@ -196,12 +196,9 @@ export default function DashboardPage() {
   // Modals & Verbose Discovery Stream Controller
   const [showAddLeadModal, setShowAddLeadModal] = useState<boolean>(false);
   const [showDiscoveryModal, setShowDiscoveryModal] = useState<boolean>(false);
-  const [discoveryMode, setDiscoveryMode] = useState<"PRESET" | "CUSTOM">("PRESET");
   const [discoveryForm, setDiscoveryForm] = useState({
     industry: "Commercial Interior Designers & Architects",
-    location: "ALL_AHMEDABAD",
-    customField: "",
-    customLocation: "",
+    location: "Sindhu Bhavan Road, Ahmedabad",
     targetCount: 30,
     runAudit: true,
   });
@@ -304,11 +301,9 @@ export default function DashboardPage() {
 
   // Launch Streaming Discovery
   const handleRunDiscovery = async () => {
-    if (discoveryMode === "CUSTOM") {
-      if (!discoveryForm.customField.trim() || !discoveryForm.customLocation.trim()) {
-        alert("Please specify both Specifier Field and Location for custom discovery.");
-        return;
-      }
+    if (!discoveryForm.industry.trim() || !discoveryForm.location.trim()) {
+      alert("Please specify both Specifier Profession and Location query.");
+      return;
     }
 
     const newSessionId = `dsc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -320,13 +315,8 @@ export default function DashboardPage() {
     setDiscoveryLogs([]);
     setCurrentStudioPreview(null);
 
-    const industryToUse = discoveryMode === "CUSTOM"
-      ? discoveryForm.customField.trim()
-      : discoveryForm.industry;
-
-    const locationToUse = discoveryMode === "CUSTOM"
-      ? discoveryForm.customLocation.trim()
-      : discoveryForm.location;
+    const industryToUse = discoveryForm.industry.trim();
+    const locationToUse = discoveryForm.location.trim();
 
     setStreamMetrics({
       totalSaved: 0,
@@ -2802,151 +2792,42 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Mode Selector: 2 Mutually Exclusive Options */}
-                  <div>
-                    <label className="block font-semibold text-[#374151] mb-1.5">
-                      Specifier Selection Mode
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDiscoveryMode("PRESET")}
-                        className={`p-3 rounded-lg border text-left transition flex items-start gap-2.5 ${
-                          discoveryMode === "PRESET"
-                            ? "border-[#000000] bg-white ring-1 ring-[#000000] shadow-2xs"
-                            : "border-[#E5E7EB] bg-[#F9FAFB] hover:border-[#D1D5DB] text-[#6B7280]"
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
-                          discoveryMode === "PRESET" ? "border-[#FF7700] bg-[#FF7700]" : "border-[#9CA3AF] bg-white"
-                        }`}>
-                          {discoveryMode === "PRESET" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </div>
-                        <div>
-                          <span className={`font-bold block text-xs ${discoveryMode === "PRESET" ? "text-[#111827]" : "text-[#4B5563]"}`}>
-                            Option 1: Curated Micro-Markets
-                          </span>
-                          <span className="text-[11px] text-[#6B7280] block mt-0.5 leading-snug">
-                            Pre-configured commercial hubs across Ahmedabad and Gujarat.
-                          </span>
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDiscoveryMode("CUSTOM")}
-                        className={`p-3 rounded-lg border text-left transition flex items-start gap-2.5 ${
-                          discoveryMode === "CUSTOM"
-                            ? "border-[#000000] bg-white ring-1 ring-[#000000] shadow-2xs"
-                            : "border-[#E5E7EB] bg-[#F9FAFB] hover:border-[#D1D5DB] text-[#6B7280]"
-                        }`}
-                      >
-                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 shrink-0 ${
-                          discoveryMode === "CUSTOM" ? "border-[#FF7700] bg-[#FF7700]" : "border-[#9CA3AF] bg-white"
-                        }`}>
-                          {discoveryMode === "CUSTOM" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </div>
-                        <div>
-                          <span className={`font-bold block text-xs ${discoveryMode === "CUSTOM" ? "text-[#111827]" : "text-[#4B5563]"}`}>
-                            Option 2: Custom Field & Location
-                          </span>
-                          <span className="text-[11px] text-[#6B7280] block mt-0.5 leading-snug">
-                            Two specific boxes to target any custom trade profession and location.
-                          </span>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* OPTION 1 CONTENT: PRESET MICRO-GRIDS & PERSONA */}
-                  {discoveryMode === "PRESET" && (
-                    <div className="space-y-3 bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E5E7EB]">
+                  {/* Clean 2-Box Specifier Query Approach */}
+                  <div className="space-y-3 bg-[#F9FAFB] p-4 rounded-xl border border-[#E5E7EB]">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div>
-                        <label className="block font-semibold text-[#374151] mb-1.5">
-                          Select Commercial Micro-Grid Corridor
+                        <label className="block font-semibold text-[#374151] mb-1">
+                          1. Specifier Field / Profession *
                         </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {[
-                            { label: "🔥 All Ahmedabad Corridors", query: "ALL_AHMEDABAD" },
-                            { label: "Bodakdev & Sindhu Bhavan", query: "Bodakdev & Sindhu Bhavan Road Ahmedabad" },
-                            { label: "SG Highway & Prahlad Nagar", query: "Prahlad Nagar & SG Highway Ahmedabad" },
-                            { label: "GIFT City & Gandhinagar", query: "GIFT City & Gandhinagar SEZ" },
-                            { label: "CG Road & Navrangpura", query: "CG Road & Navrangpura Ahmedabad" },
-                            { label: "Surat Diamond Bourse", query: "Vesu & Diamond Bourse Surat" },
-                          ].map((preset) => {
-                            const isSelected = discoveryForm.location === preset.query;
-                            return (
-                              <button
-                                key={preset.label}
-                                type="button"
-                                onClick={() => setDiscoveryForm({ ...discoveryForm, location: preset.query })}
-                                className={`p-2 rounded-lg border text-left transition ${
-                                  isSelected
-                                    ? "border-[#000000] bg-[#000000] text-white font-semibold shadow-xs"
-                                    : "border-[#E5E7EB] bg-white text-[#374151] hover:border-[#D1D5DB]"
-                                }`}
-                              >
-                                <div className="text-[11px] font-medium leading-tight">{preset.label}</div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block font-semibold text-[#374151] mb-1">Target Specifier Persona</label>
-                        <select
+                        <input
+                          type="text"
+                          placeholder="e.g. Commercial Architects or Fitout Contractors"
                           value={discoveryForm.industry}
                           onChange={(e) => setDiscoveryForm({ ...discoveryForm, industry: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-[#D1D5DB] rounded-md focus:ring-1 focus:ring-[#000000] bg-white text-xs"
-                        >
-                          <option value="Commercial Interior Designers & Architects">Commercial Interior Designers & Architects</option>
-                          <option value="Workplace Architects">Workplace & Corporate Architects</option>
-                          <option value="Turnkey Fitout Contractors">Turnkey Commercial Fitout Contractors</option>
-                          <option value="Corporate Interior Designers">Corporate Interior Designers</option>
-                        </select>
+                          className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:ring-1 focus:ring-[#000000] bg-white text-xs"
+                        />
+                        <span className="text-[10px] text-[#6B7280] mt-1 block">
+                          Architectural discipline, contractor specialty, or trade profession.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-[#374151] mb-1">
+                          2. Location / Corridor / City *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Sindhu Bhavan Road, Ahmedabad or GIFT City"
+                          value={discoveryForm.location}
+                          onChange={(e) => setDiscoveryForm({ ...discoveryForm, location: e.target.value })}
+                          className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:ring-1 focus:ring-[#000000] bg-white text-xs"
+                        />
+                        <span className="text-[10px] text-[#6B7280] mt-1 block">
+                          Commercial area, road, or city submarket.
+                        </span>
                       </div>
                     </div>
-                  )}
-
-                  {/* OPTION 2 CONTENT: CUSTOM 2-BOX SPECIFIER APPROACH */}
-                  {discoveryMode === "CUSTOM" && (
-                    <div className="space-y-3 bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E5E7EB]">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-semibold text-[#374151] mb-1">
-                            1. Specifier Field / Profession *
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Commercial Interior Architects"
-                            value={discoveryForm.customField}
-                            onChange={(e) => setDiscoveryForm({ ...discoveryForm, customField: e.target.value })}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:ring-1 focus:ring-[#000000] bg-white text-xs"
-                          />
-                          <span className="text-[10px] text-[#6B7280] mt-0.5 block">
-                            Target specialty or architectural discipline.
-                          </span>
-                        </div>
-
-                        <div>
-                          <label className="block font-semibold text-[#374151] mb-1">
-                            2. Location / Micro-Market *
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Prahlad Nagar Ahmedabad"
-                            value={discoveryForm.customLocation}
-                            onChange={(e) => setDiscoveryForm({ ...discoveryForm, customLocation: e.target.value })}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:ring-1 focus:ring-[#000000] bg-white text-xs"
-                          />
-                          <span className="text-[10px] text-[#6B7280] mt-0.5 block">
-                            Commercial area, road, or city submarket.
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  </div>
 
                   {/* Common Options: Target Volume & Audit Toggle */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">

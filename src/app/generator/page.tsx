@@ -53,43 +53,9 @@ interface StreamEvent {
   phone?: string;
 }
 
-const PRESET_PERSONAS = [
-  {
-    id: "Commercial Architects & Interior Designers",
-    title: "Commercial Architects & Designers",
-    description: "Architectural studios designing corporate workspaces, IT parks, and commercial fitouts.",
-    tag: "Highest BOQ Value",
-  },
-  {
-    id: "Turnkey Fitout Contractors",
-    title: "Turnkey Fitout Contractors",
-    description: "General contractors executing fast-track office handovers under penalty clauses.",
-    tag: "High Repeat Orders",
-  },
-  {
-    id: "Corporate Office Specifiers & Coworking Builders",
-    title: "Corporate & Coworking Builders",
-    description: "Facility directors, corporate real estate teams, and coworking space builders.",
-    tag: "Direct Client Specifiers",
-  },
-];
-
-const PRESET_CORRIDORS = [
-  { label: "🔥 All Ahmedabad Prime Corridors", query: "ALL_AHMEDABAD_CORRIDORS", highlight: true },
-  { label: "Bodakdev & Sindhu Bhavan Road", query: "Bodakdev & Sindhu Bhavan Road, Ahmedabad" },
-  { label: "Prahlad Nagar & SG Highway", query: "Prahlad Nagar & SG Highway, Ahmedabad" },
-  { label: "GIFT City & Gandhinagar SEZ", query: "GIFT City & Gandhinagar SEZ" },
-  { label: "CG Road & Navrangpura", query: "CG Road & Navrangpura, Ahmedabad" },
-  { label: "Science City & Sola", query: "Science City & Sola, Ahmedabad" },
-  { label: "Surat Diamond Bourse & Vesu", query: "Vesu & Diamond Bourse, Surat" },
-  { label: "Alkapuri & Gotri, Vadodara", query: "Alkapuri & Gotri, Vadodara" },
-];
-
 export default function LeadGeneratorDesktopPage() {
-  const [selectedPersona, setSelectedPersona] = useState(PRESET_PERSONAS[0].id);
-  const [selectedCorridor, setSelectedCorridor] = useState(PRESET_CORRIDORS[0].query);
-  const [customCorridor, setCustomCorridor] = useState("");
-  const [useCustomCorridor, setUseCustomCorridor] = useState(false);
+  const [industryQuery, setIndustryQuery] = useState("Commercial Architects & Interior Designers");
+  const [locationQuery, setLocationQuery] = useState("Sindhu Bhavan Road, Ahmedabad");
   const [targetCount, setTargetCount] = useState(15);
   const [runAudit, setRunAudit] = useState(true);
   const [headless, setHeadless] = useState(true);
@@ -145,12 +111,12 @@ export default function LeadGeneratorDesktopPage() {
     const newSessionId = `dsc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     setSessionId(newSessionId);
 
-    const activeCorridor = useCustomCorridor && customCorridor.trim() ? customCorridor.trim() : selectedCorridor;
-    const isMulti = activeCorridor === "ALL_AHMEDABAD_CORRIDORS";
+    const activeIndustry = industryQuery.trim() || "Commercial Architects & Interior Designers";
+    const activeLocation = locationQuery.trim() || "Ahmedabad";
 
     addLog(`Initializing Tier 1 Native Lead Generator session: ${newSessionId}`, "INFO");
-    addLog(`Persona: ${selectedPersona}`, "INFO");
-    addLog(`Location Target: ${activeCorridor}`, "INFO");
+    addLog(`Specifier Query: ${activeIndustry}`, "INFO");
+    addLog(`Location Target: ${activeLocation}`, "INFO");
     addLog(`Target Leads: ${targetCount} | Browser Headless: ${headless}`, "INFO");
 
     const controller = new AbortController();
@@ -161,12 +127,12 @@ export default function LeadGeneratorDesktopPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          industry: selectedPersona,
-          location: activeCorridor,
+          industry: activeIndustry,
+          location: activeLocation,
           targetCount,
           runAudit,
           headless,
-          multiCorridor: isMulti,
+          multiCorridor: false,
           sessionId: newSessionId,
         }),
         signal: controller.signal,
@@ -364,109 +330,76 @@ export default function LeadGeneratorDesktopPage() {
         {/* Left Column: Generator Controls (5 cols) */}
         <section className="lg:col-span-5 space-y-4">
           <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-xs space-y-5">
+            {/* 1. Specifier / Trade Query */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="font-bold text-sm text-[#111827] flex items-center gap-1.5">
-                  <Sliders className="w-4 h-4 text-[#FF7700]" />
-                  <span>1. Target Specifier Persona</span>
-                </h2>
-                <span className="text-[11px] text-[#6B7280]">Select discipline</span>
-              </div>
-              <div className="space-y-2">
-                {PRESET_PERSONAS.map((p) => {
-                  const isSelected = selectedPersona === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      disabled={isRunning}
-                      onClick={() => setSelectedPersona(p.id)}
-                      className={`w-full p-3 rounded-lg border text-left transition flex items-start justify-between gap-3 ${
-                        isSelected
-                          ? "border-[#000000] bg-[#000000] text-white shadow-xs"
-                          : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB] text-[#374151]"
-                      } ${isRunning ? "opacity-60 cursor-not-allowed" : ""}`}
-                    >
-                      <div>
-                        <div className="font-bold text-xs">{p.title}</div>
-                        <div
-                          className={`text-[11px] mt-0.5 leading-snug ${
-                            isSelected ? "text-[#D1D5DB]" : "text-[#6B7280]"
-                          }`}
-                        >
-                          {p.description}
-                        </div>
-                      </div>
-                      <span
-                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
-                          isSelected
-                            ? "bg-[#FF7700] text-white"
-                            : "bg-[#F3F4F6] text-[#4B5563]"
-                        }`}
-                      >
-                        {p.tag}
-                      </span>
-                    </button>
-                  );
-                })}
+              <label className="block font-bold text-sm text-[#111827] mb-1.5 flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-[#FF7700]" />
+                <span>1. Specifier Profession / Trade Query *</span>
+              </label>
+              <input
+                type="text"
+                disabled={isRunning}
+                value={industryQuery}
+                onChange={(e) => setIndustryQuery(e.target.value)}
+                placeholder="e.g. Commercial Architects or Turnkey Fitout Contractors"
+                className="w-full px-3.5 py-2.5 text-xs border border-[#D1D5DB] rounded-lg focus:ring-2 focus:ring-[#000000] bg-white font-medium shadow-2xs"
+              />
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-[10px] text-[#6B7280]">Suggestions:</span>
+                {[
+                  "Commercial Architects",
+                  "Turnkey Fitout Contractors",
+                  "Corporate Interior Designers",
+                  "Coworking Space Builders",
+                ].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => setIndustryQuery(s)}
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#374151] transition"
+                  >
+                    + {s}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Corridor Selector */}
+            {/* 2. Location / Corridor / City Query */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <h2 className="font-bold text-sm text-[#111827] flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-[#FF7700]" />
-                  <span>2. Prime Commercial Corridor</span>
-                </h2>
-                <button
-                  type="button"
-                  disabled={isRunning}
-                  onClick={() => setUseCustomCorridor(!useCustomCorridor)}
-                  className="text-[11px] text-[#FF7700] font-semibold hover:underline"
-                >
-                  {useCustomCorridor ? "Use Presets" : "Custom Location"}
-                </button>
-              </div>
-
-              {!useCustomCorridor ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {PRESET_CORRIDORS.map((c) => {
-                    const isSelected = selectedCorridor === c.query;
-                    return (
-                      <button
-                        key={c.query}
-                        type="button"
-                        disabled={isRunning}
-                        onClick={() => setSelectedCorridor(c.query)}
-                        className={`p-2.5 rounded-lg border text-left transition text-xs font-semibold ${
-                          isSelected
-                            ? "border-[#FF7700] bg-[#FFF7ED] text-[#C2410C] ring-1 ring-[#FF7700]"
-                            : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB] text-[#374151]"
-                        } ${c.highlight ? "col-span-2 font-bold" : ""} ${
-                          isRunning ? "opacity-60 cursor-not-allowed" : ""
-                        }`}
-                      >
-                        {c.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <input
-                    type="text"
+              <label className="block font-bold text-sm text-[#111827] mb-1.5 flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-[#FF7700]" />
+                <span>2. Location, Road or City Micro-Market *</span>
+              </label>
+              <input
+                type="text"
+                disabled={isRunning}
+                value={locationQuery}
+                onChange={(e) => setLocationQuery(e.target.value)}
+                placeholder="e.g. Sindhu Bhavan Road, Ahmedabad or GIFT City"
+                className="w-full px-3.5 py-2.5 text-xs border border-[#D1D5DB] rounded-lg focus:ring-2 focus:ring-[#000000] bg-white font-medium shadow-2xs"
+              />
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-[10px] text-[#6B7280]">Suggestions:</span>
+                {[
+                  "Sindhu Bhavan Road, Ahmedabad",
+                  "Prahlad Nagar, Ahmedabad",
+                  "GIFT City, Gandhinagar",
+                  "CG Road, Ahmedabad",
+                  "Surat Diamond Bourse",
+                  "Alkapuri, Vadodara",
+                ].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
                     disabled={isRunning}
-                    placeholder="e.g. Science City Road, Ahmedabad or GIFT City"
-                    value={customCorridor}
-                    onChange={(e) => setCustomCorridor(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-[#D1D5DB] rounded-lg focus:ring-1 focus:ring-[#000000] bg-white"
-                  />
-                  <span className="text-[10px] text-[#6B7280]">
-                    Enter any commercial street, road, or corporate zone in Gujarat.
-                  </span>
-                </div>
-              )}
+                    onClick={() => setLocationQuery(c)}
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#374151] transition"
+                  >
+                    + {c}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Target Volume */}
