@@ -6,6 +6,7 @@ import { crawlFirmWebsite } from "@/lib/crawler";
 import { evaluateModularLeadScore } from "@/lib/evaluator";
 import { generateModularOutreach } from "@/lib/copywriting";
 import { logCandidateEvent } from "@/lib/events";
+import { sanitizeIndianPhone } from "@/lib/discovery";
 
 export async function GET(
   req: NextRequest,
@@ -188,6 +189,10 @@ export async function PATCH(
 
     if (body.operatorNotes !== undefined) updateFields.operatorNotes = body.operatorNotes;
     if (body.contactPerson !== undefined) updateFields.contactPerson = body.contactPerson;
+    if (body.phone !== undefined) {
+      updateFields.phone = sanitizeIndianPhone(body.phone) || body.phone;
+      updateFields.isDummyPhone = false;
+    }
     if (body.category !== undefined) updateFields.category = body.category;
     if (body.city !== undefined) updateFields.city = body.city;
     if (body.projectType !== undefined) updateFields.projectType = body.projectType;
@@ -206,7 +211,7 @@ export async function PATCH(
     if (body.markContacted) {
       if (!candidate.firstContactedAt) updateFields.firstContactedAt = new Date();
       updateFields.lastContactedAt = new Date();
-      if (candidate.qualificationStage === "NEW") {
+      if (!body.qualificationStage && candidate.qualificationStage === "NEW") {
         updateFields.qualificationStage = "CONTACTED";
       }
     }
@@ -216,6 +221,17 @@ export async function PATCH(
       .where(eq(candidates.id, id));
 
     // Audit Event Logging
+    if (body.phone !== undefined && body.phone !== candidate.phone) {
+      await logCandidateEvent({
+        candidateId: id,
+        eventType: "NOTE_UPDATED",
+        title: "Phone Number Enriched",
+        description: `Phone updated to ${updateFields.phone}`,
+        channel: "SYSTEM",
+        actor: "Sales Rep",
+      });
+    }
+
     if (body.qualificationStage && body.qualificationStage !== candidate.qualificationStage) {
       await logCandidateEvent({
         candidateId: id,
@@ -226,7 +242,7 @@ export async function PATCH(
       });
     }
 
-    if (body.markContacted) {
+    if (body.logWhatsAppOutreach) {
       await logCandidateEvent({
         candidateId: id,
         eventType: "OUTREACH_SENT",

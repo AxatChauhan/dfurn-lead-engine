@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { searches, candidates, outreachMessages } from "@/db/schema";
+import { searches, outreachMessages } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { runMultiSourceDiscovery } from "@/lib/discovery";
-import { evaluateModularLeadScore } from "@/lib/evaluator";
 import { generateModularOutreach } from "@/lib/copywriting";
+import { ingestCandidateLead } from "@/lib/intake-pipeline";
 
 /**
  * Discovery API Route
@@ -69,80 +69,61 @@ export async function POST(req: NextRequest) {
     }).slice(0, targetCount);
 
     let qualifiedCount = 0;
+    let duplicateMergedCount = 0;
+    let residentialRejectedCount = 0;
 
     for (const item of discovered) {
-      const candidateId = `cand_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-
-      // Evaluate lead with enriched audit signals
-      const scoring = evaluateModularLeadScore({
-        businessName: item.businessName,
-        category: item.category,
-        city: item.city,
-        phone: item.phone,
-        email: item.email,
-        website: item.url,
-        rating: item.rating,
-        reviewCount: item.reviewCount,
-        hasCommercialFocus: item.hasCommercialFocus,
-        portfolioTags: item.commercialTags,
-      });
-
-      if (scoring.leadTier === "A+" || scoring.leadTier === "A") {
-        qualifiedCount++;
-      }
-
-      const decisionMakers = item.linkedInUrl
-        ? JSON.stringify([{ name: item.businessName, linkedin: item.linkedInUrl }])
-        : null;
-
-      // Insert candidate record into PostgreSQL
-      await db.insert(candidates)
-        .values({
-          id: candidateId,
+      const ingestRes = await ingestCandidateLead(
+        {
           searchId,
           businessName: item.businessName,
+          category: item.category || industry,
           industry,
-          category: item.category,
-          city: item.city,
+          city: item.city || location,
           address: item.address,
-          phone: item.phone || "-",
-          email: item.email || null,
-          website: item.url || null,
-          rating: item.rating ? String(item.rating) : null,
-          reviewCount: item.reviewCount || 0,
-          sourceType: item.sourceType,
+          phone: item.phone,
+          email: item.email,
+          website: item.url,
+          rating: item.rating,
+          reviewCount: item.reviewCount,
+          sourceType: item.sourceType || "google_maps",
           leadSource: "google_maps",
-          totalScore: scoring.totalScore,
-          leadTier: scoring.leadTier,
-          fitScore: scoring.fitScore,
-          scaleScore: scoring.scaleScore,
-          activityScore: scoring.activityScore,
-          accessibilityScore: scoring.accessibilityScore,
-          synergyScore: scoring.synergyScore,
-          reasoning: scoring.reasoning,
-          portfolioTags: item.commercialTags ? JSON.stringify(item.commercialTags) : null,
-          hasCommercialFocus: item.hasCommercialFocus !== false,
-          decisionMakers,
-          status: "NEW",
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          notes: `Discovered in sweep (${industry} · ${location})`,
+        },
+        {
+          channel: "discovery_sweep",
+          actor: "Discovery Crawler",
+        }
+      );
+
+      if (!ingestRes.success) {
+        residentialRejectedCount++;
+        continue;
+      }
+
+      if (ingestRes.action === "MERGED") {
+        duplicateMergedCount++;
+        continue;
+      }
+
+      if (ingestRes.action === "CREATED") {
+        if (ingestRes.leadTier === "A+" || ingestRes.leadTier === "A") {
+          qualifiedCount++;
+        }
+
+        // Generate Online Outreach Copy
+        const copy = generateModularOutreach({
+          businessName: ingestRes.businessName,
+          category: ingestRes.category,
+          city: ingestRes.city,
+          phone: ingestRes.phone,
+          recommendedHook: "Factory-direct modular workstations with 15-day turnaround",
         });
 
-      // Generate Online Outreach Copy
-      const copy = generateModularOutreach({
-        businessName: item.businessName,
-        category: item.category,
-        city: item.city,
-        phone: item.phone,
-        recommendedHook: scoring.recommendedHook,
-        portfolioTags: item.commercialTags,
-      });
-
-      // Insert WhatsApp Outreach Draft
-      await db.insert(outreachMessages)
-        .values({
+        // Insert WhatsApp Outreach Draft
+        await db.insert(outreachMessages).values({
           id: `msg_wa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          candidateId,
+          candidateId: ingestRes.candidateId,
           channel: "WHATSAPP",
           stepNumber: 1,
           subject: "WhatsApp Intro & CAD Library Access",
@@ -152,12 +133,11 @@ export async function POST(req: NextRequest) {
           createdAt: new Date(),
         });
 
-      // Insert Email Outreach Draft
-      if (copy.coldEmail && copy.coldEmail.body) {
-        await db.insert(outreachMessages)
-          .values({
+        // Insert Email Outreach Draft
+        if (copy.coldEmail && copy.coldEmail.body) {
+          await db.insert(outreachMessages).values({
             id: `msg_em_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            candidateId,
+            candidateId: ingestRes.candidateId,
             channel: "EMAIL",
             stepNumber: 1,
             subject: copy.coldEmail.subject,
@@ -166,6 +146,7 @@ export async function POST(req: NextRequest) {
             approvalStatus: "draft_pending_review",
             createdAt: new Date(),
           });
+        }
       }
     }
 
@@ -184,6 +165,8 @@ export async function POST(req: NextRequest) {
       searchId,
       candidatesFound: discovered.length,
       qualifiedCount,
+      duplicateMergedCount,
+      residentialRejectedCount,
     });
   } catch (error: any) {
     console.error("[Discovery Route] Error:", error);

@@ -98,3 +98,11 @@
   color: #4B5563;
   border: 1px solid #E5E7EB;
 }
+
+/* Hide Next.js dev indicator overlay so it does not obstruct calling desk leads */
+nextjs-portal,
+div[data-nextjs-dev-tools-button],
+div[data-nextjs-toast] {
+  display: none !important;
+}
+

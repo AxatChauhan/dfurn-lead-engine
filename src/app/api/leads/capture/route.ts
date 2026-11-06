@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { candidates, rejectedLeads, candidateEvents } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { sanitizeIndianPhone } from "@/lib/discovery";
-import { isSuspiciousDummyPhone, isResidentialMismatch } from "@/lib/qualification";
+import { ingestCandidateLead } from "@/lib/intake-pipeline";
 
+/**
+ * Inbound Lead Capture API (Meta Ads, Google Search Ads, Direct Forms)
+ * Routes all incoming submissions strictly through the Universal Intake Gatekeeper.
+ * Strictly zero em dashes.
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -30,95 +31,18 @@ export async function POST(req: NextRequest) {
 
     const displayName = businessName || contactPerson || `Lead from ${city}`;
 
-    // 1. Strict Residential Filter: Route explicit residential projects to rejected_leads
-    const scopeCheckText = `${projectType} ${notes || ""} ${category}`;
-    if (isResidentialMismatch(scopeCheckText)) {
-      const rejectId = `rej_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      await db.insert(rejectedLeads).values({
-        id: rejectId,
+    // Pass through Universal Production Intake Gatekeeper
+    const result = await ingestCandidateLead(
+      {
         businessName: displayName,
         contactPerson: contactPerson || undefined,
-        phone: rawPhone || undefined,
-        email,
-        city,
-        leadSource,
-        category: "Residential Decorator",
-        rejectionReason: "RESIDENTIAL_MISMATCH",
-        notes: notes || `Project type '${projectType}' does not align with commercial modular furniture`,
-        rawPayload: body,
-        rejectedAt: new Date(),
-      });
-
-      return NextResponse.json({
-        success: true,
-        rejected: true,
-        rejectId,
-        message: "Submission identified as residential mismatch and preserved in Rejected Leads.",
-      }, { status: 200 });
-    }
-
-    if (!rawPhone) {
-      return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
-    }
-
-    const isDummyPhone = isSuspiciousDummyPhone(rawPhone);
-    const phone = sanitizeIndianPhone(rawPhone) || rawPhone;
-
-    // Dedup check by phone
-    const [existing] = await db
-      .select()
-      .from(candidates)
-      .where(eq(candidates.phone, phone));
-
-    if (existing) {
-      // Update existing lead with latest campaign touchpoint
-      await db.update(candidates)
-        .set({
-          operatorNotes: notes
-            ? `${existing.operatorNotes ? existing.operatorNotes + " · " : ""}[New Ad Submit]: ${notes}`
-            : existing.operatorNotes,
-          campaignName: campaignName || existing.campaignName,
-          workstationCount: workstationCount ?? existing.workstationCount,
-          hasFloorPlan: hasFloorPlan || existing.hasFloorPlan,
-          isDummyPhone: isDummyPhone || existing.isDummyPhone,
-          updatedAt: new Date(),
-        })
-        .where(eq(candidates.id, existing.id));
-
-      await db.insert(candidateEvents).values({
-        id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        candidateId: existing.id,
-        eventType: "LEAD_RE_ENGAGED",
-        title: "Re-engaged via Ad Campaign",
-        description: `Submitted new form via campaign: ${campaignName || "Paid Ad"}`,
-        channel: leadSource.includes("google") ? "GOOGLE_ADS" : "META_ADS",
-        metadata: { campaignName, utmSource, workstationCount },
-        actor: "Ad Webhook",
-        createdAt: new Date(),
-      });
-
-      return NextResponse.json({
-        success: true,
-        isExisting: true,
-        leadId: existing.id,
-        message: `Existing lead updated with new inquiry details. Stage: ${existing.qualificationStage}`,
-      });
-    }
-
-    const leadId = `lead_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-
-    await db.insert(candidates)
-      .values({
-        id: leadId,
-        businessName: displayName,
-        contactPerson: contactPerson || undefined,
-        phone,
+        phone: rawPhone,
         email,
         city,
         state,
         category,
         projectType,
-        workstationCount: workstationCount ?? null,
+        workstationCount,
         projectTimeline,
         hasFloorPlan,
         estimatedBudget,
@@ -127,48 +51,50 @@ export async function POST(req: NextRequest) {
         utmSource,
         utmMedium,
         utmCampaign,
-        qualificationStage: "NEW",
-        operatorNotes: notes || (isDummyPhone ? "[DUMMY SUBMISSION]: Incomplete or suspicious phone number submitted" : `Direct ad inquiry for ${projectType} in ${city}`),
-        whatsappAvailable: !isDummyPhone,
-        hasCommercialFocus: true,
-        isDummyPhone,
-        enrichmentStatus: "NONE",
-        status: "NEW",
-        totalScore: isDummyPhone ? 40 : 85,
-        leadTier: isDummyPhone ? "C" : "A",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+        notes: notes || `Direct commercial ad inquiry for ${projectType} in ${city}`,
+        sourceType: "paid_ads",
+      },
+      {
+        channel: "ad_webhook",
+        actor: leadSource.includes("google") ? "Google Ads Webhook" : "Meta Ads Webhook",
+      }
+    );
 
-    // Insert chronological timeline event
-    await db.insert(candidateEvents).values({
-      id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      candidateId: leadId,
-      eventType: "LEAD_CAPTURED",
-      title: isDummyPhone ? "Ad Form Submitted (Flagged Dummy Phone)" : "Inbound Ad Lead Ingested",
-      description: `Campaign: ${campaignName || "Direct Ad"} · Scope: ${projectType} (${workstationCount ? workstationCount + " seats" : "General"})`,
-      channel: leadSource.includes("google") ? "GOOGLE_ADS" : "META_ADS",
-      metadata: { campaignName, utmSource, utmMedium, isDummyPhone },
-      actor: "Ad Webhook",
-      createdAt: new Date(),
-    });
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: true,
+          rejected: true,
+          rejectId: result.rejectedId,
+          rejectionReason: result.rejectionReason,
+          message: `Submission disqualified: ${result.details}`,
+        },
+        { status: 200 }
+      );
+    }
+
+    if (result.action === "MERGED") {
+      return NextResponse.json({
+        success: true,
+        isExisting: true,
+        leadId: result.candidateId,
+        message: `Existing lead updated with new inquiry details. Profile merged automatically without duplicate row creation.`,
+      });
+    }
 
     return NextResponse.json(
       {
         success: true,
         isExisting: false,
-        leadId,
-        isDummyPhone,
-        message: isDummyPhone
-          ? "Lead captured with dummy phone flag in Ads section"
-          : "New commercial ad lead captured successfully",
+        leadId: result.candidateId,
+        message: "New commercial ad lead captured successfully",
       },
       { status: 201 }
     );
   } catch (error: any) {
     console.error("[Leads Capture API] Error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to capture lead" },
+      { error: "Internal server error processing lead capture", details: error?.message },
       { status: 500 }
     );
   }

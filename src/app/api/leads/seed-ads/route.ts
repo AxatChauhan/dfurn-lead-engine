@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { candidates, candidateEvents } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { ingestCandidateLead } from "@/lib/intake-pipeline";
 
 export async function POST(req: NextRequest) {
   try {
@@ -161,30 +159,37 @@ export async function POST(req: NextRequest) {
 
     let insertedCount = 0;
     for (const lead of sampleLeads) {
-      const existing = await db
-        .select({ id: candidates.id })
-        .from(candidates)
-        .where(eq(candidates.businessName, lead.businessName))
-        .limit(1);
+      const res = await ingestCandidateLead(
+        {
+          businessName: lead.businessName,
+          contactPerson: lead.contactPerson,
+          phone: lead.phone,
+          email: lead.email,
+          city: lead.city,
+          state: lead.state,
+          category: lead.category,
+          projectType: lead.projectType,
+          workstationCount: lead.workstationCount,
+          hasFloorPlan: lead.hasFloorPlan,
+          projectTimeline: lead.projectTimeline,
+          estimatedBudget: lead.estimatedBudget,
+          leadSource: lead.leadSource,
+          sourceType: lead.sourceType,
+          campaignName: lead.campaignName,
+          adsetName: lead.adsetName,
+          adName: lead.adName,
+          utmSource: lead.utmSource,
+          utmMedium: lead.utmMedium,
+          utmCampaign: lead.utmCampaign,
+          notes: lead.operatorNotes,
+        },
+        {
+          channel: "ad_webhook",
+          actor: "Ad Engine Seeder",
+        }
+      );
 
-      if (existing.length === 0) {
-        await db.insert(candidates).values(lead);
-        await db.insert(candidateEvents).values({
-          id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          candidateId: lead.id,
-          eventType: "LEAD_CAPTURED",
-          title: "Inbound Lead Captured",
-          description: `Captured from campaign: ${lead.campaignName} (Ad: ${lead.adName})`,
-          channel: targetChannel === "paid_ads_google" ? "GOOGLE_ADS" : "META_ADS",
-          metadata: {
-            campaignName: lead.campaignName,
-            workstationCount: lead.workstationCount,
-            adName: lead.adName,
-            isDummyPhone: lead.isDummyPhone,
-          },
-          actor: "Ad Engine Webhook",
-          createdAt: new Date(),
-        });
+      if (res.success && res.action === "CREATED") {
         insertedCount++;
       }
     }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { candidateEvents } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
@@ -13,7 +13,7 @@ export async function GET(
       .select()
       .from(candidateEvents)
       .where(eq(candidateEvents.candidateId, id))
-      .orderBy(asc(candidateEvents.createdAt));
+      .orderBy(desc(candidateEvents.createdAt));
 
     return NextResponse.json({ events });
   } catch (err: any) {

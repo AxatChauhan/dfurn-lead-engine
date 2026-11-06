@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { candidates } from "@/db/schema";
 import { desc, eq, and } from "drizzle-orm";
+import { ingestCandidateLead } from "@/lib/intake-pipeline";
 
 export async function GET(req: NextRequest) {
   try {
@@ -94,5 +95,36 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error("[Candidates API] Error:", error);
     return NextResponse.json({ error: error.message || "Failed to fetch candidates" }, { status: 500 });
+  }
+}
+
+/**
+ * Manual / API Direct Lead Ingestion
+ * Strictly enforces Universal Intake Pipeline business logic.
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const result = await ingestCandidateLead(body, {
+      channel: "manual_entry",
+      actor: "Operator Console",
+    });
+
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          rejected: true,
+          rejectionReason: result.rejectionReason,
+          details: result.details,
+        },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(result, { status: 201 });
+  } catch (error: any) {
+    console.error("[Candidates API POST] Error:", error);
+    return NextResponse.json({ error: error.message || "Failed to ingest candidate" }, { status: 500 });
   }
 }
