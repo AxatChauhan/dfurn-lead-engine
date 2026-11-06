@@ -77,6 +77,59 @@ export default function LeadGeneratorDesktopPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Load existing database candidates on mount so the list reflects current database state
+  const loadDatabaseLeads = async () => {
+    try {
+      const res = await fetch("/api/candidates?dummy=false");
+      const data = await res.json();
+      if (data.candidates && Array.isArray(data.candidates)) {
+        const loaded: DiscoveredLead[] = data.candidates.map((c: any) => {
+          let tags: string[] = [];
+          if (c.portfolioTags) {
+            if (Array.isArray(c.portfolioTags)) {
+              tags = c.portfolioTags;
+            } else if (typeof c.portfolioTags === "string") {
+              try {
+                const parsed = JSON.parse(c.portfolioTags);
+                tags = Array.isArray(parsed) ? parsed : [c.portfolioTags];
+              } catch {
+                tags = [c.portfolioTags];
+              }
+            }
+          }
+          return {
+            id: c.id,
+            businessName: c.businessName,
+            category: c.category || "Commercial Specifier",
+            city: c.city || "Ahmedabad",
+            phone: c.phone,
+            email: c.email,
+            website: c.website,
+            rating: c.rating ? parseFloat(c.rating) : undefined,
+            reviewCount: c.reviewCount,
+            totalScore: c.totalScore,
+            leadTier: c.leadTier || "A",
+            tags,
+            status: c.qualificationStage || c.status || "NEW",
+          };
+        });
+        setLeads(loaded);
+        setStats({
+          totalFound: loaded.length,
+          withPhone: loaded.filter((l) => l.phone && l.phone !== "-" && l.phone !== "–").length,
+          withEmail: loaded.filter((l) => Boolean(l.email)).length,
+          qualifiedTierA: loaded.filter((l) => l.leadTier === "A+" || l.leadTier === "A").length,
+        });
+      }
+    } catch (err) {
+      console.error("Error loading database leads in generator GUI:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadDatabaseLeads();
+  }, []);
+
   // Timer effect
   useEffect(() => {
     if (isRunning) {
@@ -104,9 +157,7 @@ export default function LeadGeneratorDesktopPage() {
   const handleStart = async () => {
     setIsRunning(true);
     setElapsedSeconds(0);
-    setLeads([]);
     setLogs([]);
-    setStats({ totalFound: 0, withPhone: 0, withEmail: 0, qualifiedTierA: 0 });
 
     const newSessionId = `dsc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     setSessionId(newSessionId);
@@ -159,7 +210,7 @@ export default function LeadGeneratorDesktopPage() {
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           try {
-            const event: StreamEvent = JSON.parse(line.replace("data: ", "").trim());
+            const event: any = JSON.parse(line.replace("data: ", "").trim());
 
             switch (event.type) {
               case "session_init":
@@ -167,7 +218,7 @@ export default function LeadGeneratorDesktopPage() {
                 break;
 
               case "corridor_start":
-                addLog(`>>> Scanning corridor: ${event.data?.corridorName || event.message}`, "MAPS");
+                addLog(`>>> Scanning corridor: ${event.corridorName || event.data?.corridorName || event.message}`, "MAPS");
                 break;
 
               case "map_search_start":
@@ -175,27 +226,53 @@ export default function LeadGeneratorDesktopPage() {
                 break;
 
               case "place_found":
-                const pTitle = event.data?.title || "Specifier Studio";
-                const pPhone = event.data?.phone;
+                const pTitle = event.data?.title || event.title || "Specifier Studio";
+                const pPhone = event.data?.phone || event.phone;
                 addLog(`[Maps Place] ${pTitle} (${pPhone || "Phone lookup underway"})`, "MAPS");
                 break;
 
               case "audit_start":
-                addLog(`Auditing website portfolio: ${event.data?.studio}`, "AUDIT");
+                addLog(`Auditing website portfolio: ${event.data?.studio || event.studio}`, "AUDIT");
                 break;
 
               case "audit_complete":
-                addLog(`Audit finished for ${event.data?.studio} (${event.data?.email || "No direct email"})`, "AUDIT");
+                addLog(`Audit finished for ${event.data?.studio || event.studio} (${event.data?.email || event.email || "No direct email"})`, "AUDIT");
                 break;
 
-              case "saved_candidate":
-                const sName = event.data?.businessName || event.businessName || "Architect Studio";
-                const sPhone = event.data?.phone || event.phone;
-                const sEmail = event.data?.email;
-                const sTier = event.data?.leadTier || event.leadTier || "A";
-                const sScore = event.data?.totalScore || event.totalScore || 75;
+              case "lead_saved":
+              case "saved_candidate": {
+                const sName = event.businessName || event.data?.businessName || "Architect Studio";
+                const sPhone = event.phone || event.data?.phone;
+                const sEmail = event.email || event.data?.email;
+                const sTier = event.leadTier || event.data?.leadTier || "A";
+                const sScore = event.totalScore || event.data?.totalScore || 75;
+                const sCategory = event.category || event.data?.category || "Commercial Specifier";
+                const sCandidateId = event.candidateId || event.data?.candidateId || `cand_${Date.now()}`;
+                const sWebsite = event.website || event.data?.website;
+                const sTags = event.tags || event.data?.tags;
 
                 addLog(`SAVED: ${sName} | Score: ${sScore} (${sTier}) | Phone: ${sPhone || "None"}`, "SAVED");
+
+                const newLeadItem: DiscoveredLead = {
+                  id: sCandidateId,
+                  businessName: sName,
+                  category: sCategory,
+                  city: event.city || "Ahmedabad",
+                  phone: sPhone,
+                  email: sEmail,
+                  website: sWebsite,
+                  rating: event.rating,
+                  reviewCount: event.reviewCount,
+                  totalScore: sScore,
+                  leadTier: sTier,
+                  tags: sTags,
+                  status: "NEW",
+                };
+
+                setLeads((prev) => {
+                  const filtered = prev.filter((p) => p.businessName !== sName);
+                  return [newLeadItem, ...filtered];
+                });
 
                 setStats((prev) => ({
                   totalFound: prev.totalFound + 1,
@@ -203,39 +280,41 @@ export default function LeadGeneratorDesktopPage() {
                   withEmail: prev.withEmail + (sEmail ? 1 : 0),
                   qualifiedTierA: prev.qualifiedTierA + (sTier === "A+" || sTier === "A" ? 1 : 0),
                 }));
-
-                setLeads((prev) => [
-                  {
-                    id: event.data?.candidateId || `cand_${Date.now()}`,
-                    businessName: sName,
-                    category: event.data?.category || "Commercial Architect",
-                    city: event.data?.city || "Ahmedabad",
-                    phone: sPhone,
-                    email: sEmail,
-                    website: event.data?.website,
-                    rating: event.data?.rating,
-                    reviewCount: event.data?.reviewCount,
-                    totalScore: sScore,
-                    leadTier: sTier,
-                    tags: event.data?.tags,
-                    status: "NEW",
-                  },
-                  ...prev,
-                ]);
                 break;
+              }
 
-              case "enriched_candidate":
-                addLog(`[ENRICHED] Verified phone number updated for ${event.data?.businessName}`, "SUCCESS");
+              case "lead_enriched":
+              case "enriched_candidate": {
+                const enrichedName = event.businessName || event.data?.businessName;
+                const enrichedPhone = event.phone || event.data?.phone;
+                addLog(`[ENRICHED] Verified phone number ${enrichedPhone || ""} updated for ${enrichedName}`, "SUCCESS");
+
+                if (enrichedName && enrichedPhone) {
+                  setLeads((prev) =>
+                    prev.map((l) => (l.businessName === enrichedName ? { ...l, phone: enrichedPhone } : l))
+                  );
+                  setStats((prev) => ({
+                    ...prev,
+                    withPhone: prev.withPhone + 1,
+                  }));
+                }
+                break;
+              }
+
+              case "lead_incomplete":
+                addLog(event.message || `No phone found for ${event.businessName || "studio"}`, "WARN");
                 break;
 
               case "complete":
                 addLog(`SUCCESS: Lead generation complete. All leads pushed to cloud database.`, "SUCCESS");
                 setIsRunning(false);
+                loadDatabaseLeads();
                 break;
 
               case "cancelled":
                 addLog(`Run stopped by operator. Generated leads saved safely.`, "WARN");
                 setIsRunning(false);
+                loadDatabaseLeads();
                 break;
 
               default:
@@ -252,6 +331,7 @@ export default function LeadGeneratorDesktopPage() {
       }
     } finally {
       setIsRunning(false);
+      loadDatabaseLeads();
     }
   };
 
