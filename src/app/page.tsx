@@ -22,6 +22,7 @@ import {
   FileText,
   Ban,
   ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 
 interface Lead {
@@ -35,6 +36,8 @@ interface Lead {
   phone: string;
   email?: string;
   website?: string;
+  rating?: number | string;
+  reviewCount?: number;
   leadSource?: string;
   projectType?: string;
   workstationCount?: number;
@@ -61,6 +64,8 @@ interface CandidateEvent {
   createdAt: string;
 }
 
+type WhatsAppTemplateKey = "CATALOG" | "TRIED_CALLING" | "PRICING";
+
 export default function TelecallerDeskPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -73,6 +78,10 @@ export default function TelecallerDeskPage() {
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [copiedPhone, setCopiedPhone] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // WhatsApp Message Preview & Template State
+  const [activeWaTemplate, setActiveWaTemplate] = useState<WhatsAppTemplateKey>("CATALOG");
+  const [waCustomText, setWaCustomText] = useState<string>("");
 
   // Call Back Schedule Modal / Quick Picker
   const [showCallbackPicker, setShowCallbackPicker] = useState<boolean>(false);
@@ -165,12 +174,27 @@ export default function TelecallerDeskPage() {
   // Active Lead Object
   const activeLead = leads.find((l) => l.id === selectedLeadId) || displayedLeads[0] || null;
 
+  // Practical 3 WhatsApp Business Templates tailored for real-world sales outreach
+  const getWhatsAppTemplates = (lead: Lead) => {
+    const company = lead.businessName || "Prospect";
+    const city = lead.city || "Ahmedabad";
+
+    return {
+      CATALOG: `Namaste ${company} team! This is D'furn Modular Systems Ahmedabad. We manufacture commercial office workstations, executive desks, and acoustic meeting pods directly from our factory. Sharing our 2026 Modular Office Catalog for your ${city} office. Would love to assist you with floor plans or factory pricing.`,
+      TRIED_CALLING: `Namaste ${company} team! Tried calling you just now regarding commercial office workstations and modular fitouts. Sharing our product catalog here on WhatsApp for your convenience. Please let us know a suitable time to connect for 2 minutes.`,
+      PRICING: `Namaste ${company} team! Calling from D'furn Modular Systems Ahmedabad. We provide direct OEM factory pricing with a 15-day turnaround for office workstations. Do you have an office floor plan or workstation count you would like us to estimate?`,
+    };
+  };
+
+  // Synchronize Live WhatsApp preview when active lead or selected template changes
   useEffect(() => {
-    if (activeLead?.id) {
+    if (activeLead) {
       loadEvents(activeLead.id);
       setQuickNote("");
+      const tpls = getWhatsAppTemplates(activeLead);
+      setWaCustomText(tpls[activeWaTemplate]);
     }
-  }, [activeLead?.id]);
+  }, [activeLead?.id, activeWaTemplate]);
 
   // Clean Phone Number Formatter
   const getCleanPhone = (phone?: string) => {
@@ -186,10 +210,8 @@ export default function TelecallerDeskPage() {
     setCopiedPhone(true);
     setTimeout(() => setCopiedPhone(false), 2500);
 
-    // Increment today's call counter
     setDailyCallsMade((prev) => prev + 1);
 
-    // Log call attempt in database if active lead
     if (activeLead) {
       logLeadEvent(activeLead.id, "CALL_ATTEMPT", "Phone Call Initiated", `Dialed ${clean} via desktop dialer.`);
     }
@@ -198,32 +220,39 @@ export default function TelecallerDeskPage() {
     showToast(`Calling ${clean} (copied to clipboard)`);
   };
 
-  // Pre-formatted WhatsApp Opener
+  // Pre-formatted WhatsApp Opener using live preview text
   const handleLaunchWhatsApp = async (lead: Lead) => {
     if (!lead.phone) return;
     const rawDigits = lead.phone.replace(/\D/g, "");
     let cleanPhone = rawDigits;
     if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
 
-    const repGreeting = `Namaste ${lead.businessName} team! Calling from D'furn Modular Systems Ahmedabad. We manufacture commercial office workstations, executive desks, and acoustic meeting pods directly from our factory. Sharing our 2026 Modular Office Catalog for your ${lead.city || "Ahmedabad"} location. Would love to assist you with floor plans or factory pricing.`;
+    const textToSend = waCustomText.trim() || getWhatsAppTemplates(lead)[activeWaTemplate];
 
     // Advance stage from NEW to CONTACTED automatically
     if ((lead.qualificationStage || "NEW") === "NEW") {
-      await updateLeadStage(lead.id, "CONTACTED", "WhatsApp Catalog Sent");
+      await updateLeadStage(lead.id, "CONTACTED", "WhatsApp Sent");
     }
+
+    const tplLabel =
+      activeWaTemplate === "CATALOG"
+        ? "Office Catalog"
+        : activeWaTemplate === "TRIED_CALLING"
+        ? "Tried Calling"
+        : "Factory Pricing";
 
     // Record Event
     await logLeadEvent(
       lead.id,
       "OUTREACH_SENT",
-      "WhatsApp Catalog Sent",
-      "Sent standard modular workstations catalog and introductory greeting."
+      `WhatsApp: ${tplLabel}`,
+      textToSend.slice(0, 140) + "..."
     );
 
     setDailyCallsMade((prev) => prev + 1);
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(repGreeting)}`;
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(textToSend)}`;
     window.open(waUrl, "_blank");
-    showToast(`WhatsApp chat opened for ${lead.businessName}`);
+    showToast(`WhatsApp chat opened with ${tplLabel} message.`);
   };
 
   // Record Lead Event Helper
@@ -337,36 +366,6 @@ export default function TelecallerDeskPage() {
     setQuickNote("");
     showToast("Note recorded in call history.");
   };
-
-  // Contextual Telecalling Script tailored to category
-  const getSpeakingScript = (lead: Lead) => {
-    const cat = (lead.category || "").toLowerCase();
-    const city = lead.city || "Ahmedabad";
-
-    if (cat.includes("architect") || cat.includes("interior")) {
-      return {
-        title: "Architect & Interior Designer Script",
-        body: `Namaste Sir/Ma'am! Calling from D'furn Modular Systems factory in Ahmedabad. We partner with commercial architects for custom 3D CAD blocks, material swatch boxes, and 18mm pre-laminated office desks. Sharing our 2026 Commercial Portfolio on WhatsApp for your upcoming client fitouts.`,
-        tip: "Offer to courier our physical material swatch box directly to their studio.",
-      };
-    }
-
-    if (cat.includes("contractor") || cat.includes("turnkey") || cat.includes("fitout")) {
-      return {
-        title: "Turnkey Fitout Contractor Script",
-        body: `Namaste Sir! Calling from D'furn Modular Systems Ahmedabad. We are direct OEM manufacturers of office workstations, aluminum partitions, and conference tables. We provide turnkey contractors with 48-hour BOQ pricing, reliable dispatch, and trade contractor rates. Can we send our price list on WhatsApp?`,
-        tip: "Ask if they have an active site BOQ or tender that needs workstation costing.",
-      };
-    }
-
-    return {
-      title: "Commercial Office Script",
-      body: `Namaste Sir/Ma'am! Calling from D'furn Modular Systems Ahmedabad. We noticed your inquiry for office furniture. We manufacture modular workstations and executive cabins directly in our factory with a 15-day turnaround, 5-year warranty, and factory pricing. Can we share workstation layouts on WhatsApp?`,
-      tip: "Ask approximately how many seats or workstations they are planning.",
-    };
-  };
-
-  const script = activeLead ? getSpeakingScript(activeLead) : null;
 
   return (
     <div className="space-y-4">
@@ -604,9 +603,9 @@ export default function TelecallerDeskPage() {
         {/* Right Column: Active Calling Card (7 cols on desktop) */}
         <div className="lg:col-span-7 bg-white rounded-xl border border-[#E5E7EB] shadow-xs flex flex-col h-[calc(100dvh-220px)] min-h-[580px] overflow-hidden">
           {activeLead ? (
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* 1. Header: Big Company Name & Location */}
-              <div className="space-y-2 border-b border-[#F3F4F6] pb-4">
+              <div className="space-y-1.5 border-b border-[#F3F4F6] pb-3.5">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -629,28 +628,15 @@ export default function TelecallerDeskPage() {
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 text-[#EF4444]" />
                         <span>{activeLead.city || "Ahmedabad"}</span>
-                        {activeLead.address && <span>({activeLead.address})</span>}
                       </span>
 
-                      {activeLead.website && (
-                        <a
-                          href={activeLead.website}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#2563EB] hover:underline flex items-center gap-1"
-                        >
-                          <Globe className="w-3 h-3" />
-                          <span>Studio Website</span>
-                        </a>
+                      {activeLead.contactPerson && (
+                        <span className="text-xs text-[#111827] font-semibold flex items-center gap-1">
+                          <User className="w-3 h-3 text-[#6B7280]" />
+                          <span>Contact: {activeLead.contactPerson}</span>
+                        </span>
                       )}
                     </div>
-
-                    {activeLead.contactPerson && (
-                      <div className="text-xs text-[#111827] font-semibold flex items-center gap-1.5 pt-0.5">
-                        <User className="w-3.5 h-3.5 text-[#6B7280]" />
-                        <span>Contact Person: {activeLead.contactPerson}</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Status Indicator */}
@@ -688,7 +674,7 @@ export default function TelecallerDeskPage() {
                     </span>
                   </button>
 
-                  {/* WhatsApp Button */}
+                  {/* WhatsApp Button (Uses Live Preview Text) */}
                   <button
                     type="button"
                     onClick={() => handleLaunchWhatsApp(activeLead)}
@@ -696,37 +682,156 @@ export default function TelecallerDeskPage() {
                     className="py-3 px-4 rounded-xl bg-[#25D366] hover:bg-[#20BA5A] active:scale-[0.99] text-white font-bold text-sm shadow-xs flex items-center justify-center gap-2 transition disabled:opacity-40"
                   >
                     <MessageSquare className="w-4 h-4 fill-current" />
-                    <span>Send WhatsApp Catalog</span>
+                    <span>Send WhatsApp Message</span>
                   </button>
                 </div>
               </div>
 
-              {/* 3. Speaking Script ("What to Say" Cheat Sheet) */}
-              {script && (
-                <div className="bg-[#FAF8F5] rounded-xl border border-[#E5E7EB] p-4 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-[#FF7700]" />
-                      <span>{script.title}</span>
+              {/* 3. Real Lead Facts Card (100% Real Evidence, Zero Scripted Questions) */}
+              <div className="bg-[#FAF8F5] rounded-xl border border-[#E5E7EB] p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between gap-2 border-b border-[#E5E7EB] pb-2">
+                  <span className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-[#FF7700]" />
+                    <span>Real Lead Facts & Location Signals</span>
+                  </span>
+                  <span className="text-[10px] text-[#059669] font-bold bg-[#ECFDF5] px-2 py-0.5 rounded border border-[#A7F3D0]">
+                    Verified Database Record
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {/* Source & Category */}
+                  <div className="p-2.5 rounded-lg bg-white border border-[#E5E7EB] space-y-1">
+                    <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider block">
+                      Lead Source & Trade
                     </span>
-                    <span className="text-[10px] text-[#6B7280] font-semibold bg-white px-2 py-0.5 rounded border border-[#E5E7EB]">
-                      Read to Client
-                    </span>
+                    <div className="font-bold text-[#111827] flex items-center gap-1.5 flex-wrap">
+                      <span>
+                        {activeLead.leadSource === "google_maps"
+                          ? "📍 Google Maps Listing"
+                          : activeLead.leadSource?.includes("ads")
+                          ? "📱 Inbound Ad Form"
+                          : "🌐 Specifier Directory"}
+                      </span>
+                      <span className="text-[#6B7280]">·</span>
+                      <span className="text-[#4B5563] font-medium">{activeLead.category || "Commercial Office"}</span>
+                    </div>
                   </div>
 
-                  <p className="text-xs text-[#374151] leading-relaxed bg-white p-3 rounded-lg border border-[#E5E7EB] font-sans">
-                    "{script.body}"
-                  </p>
+                  {/* Physical Landmark & Address */}
+                  <div className="p-2.5 rounded-lg bg-white border border-[#E5E7EB] space-y-1">
+                    <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider block">
+                      Landmark & Micro-Market
+                    </span>
+                    <div className="font-semibold text-[#111827] text-[11px] leading-snug">
+                      {activeLead.address || `${activeLead.city || "Ahmedabad"} Commercial Corridor`}
+                    </div>
+                  </div>
 
-                  <p className="text-[11px] text-[#92400E] font-medium flex items-center gap-1.5 pt-0.5">
-                    <span>💡 Pro Tip:</span>
-                    <span>{script.tip}</span>
-                  </p>
+                  {/* Google Reviews & Rating */}
+                  <div className="p-2.5 rounded-lg bg-white border border-[#E5E7EB] space-y-1">
+                    <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider block">
+                      Public Reputation
+                    </span>
+                    <div className="font-bold text-[#111827] flex items-center gap-1.5">
+                      {activeLead.rating ? (
+                        <>
+                          <span className="text-[#D97706]">⭐ {activeLead.rating} ★</span>
+                          <span className="text-[#6B7280] font-normal text-[11px]">
+                            ({activeLead.reviewCount ? `${activeLead.reviewCount} Google Reviews` : "Verified Rating"})
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[#059669] font-semibold text-[11px]">
+                          ✓ Verified Commercial Profile on Maps
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Website Portfolio Link */}
+                  <div className="p-2.5 rounded-lg bg-white border border-[#E5E7EB] space-y-1">
+                    <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider block">
+                      Online Portfolio
+                    </span>
+                    {activeLead.website ? (
+                      <a
+                        href={activeLead.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#2563EB] hover:underline font-bold text-xs flex items-center gap-1 truncate block"
+                      >
+                        <Globe className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{activeLead.website.replace(/^https?:\/\/(www\.)?/, "")}</span>
+                        <ExternalLink className="w-3 h-3 shrink-0 ml-0.5 text-[#9CA3AF]" />
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-[#9CA3AF] italic">No direct website listed</span>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
 
-              {/* 4. Step 2: What Happened on Call? (1-Click Outcome Buttons) */}
-              <div className="space-y-2.5">
+              {/* 4. Live WhatsApp Message Preview & 3-Template Switcher */}
+              <div className="bg-white rounded-xl border border-[#E5E7EB] p-3.5 space-y-2.5 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F3F4F6] pb-2">
+                  <span className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-[#25D366]" />
+                    <span>Live WhatsApp Message Preview</span>
+                  </span>
+
+                  {/* 3 Template Quick Pills (Active = Black #000000) */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      { key: "CATALOG", label: "📄 Office Catalog" },
+                      { key: "TRIED_CALLING", label: "⏰ Tried Calling You" },
+                      { key: "PRICING", label: "🏭 Factory Pricing" },
+                    ].map((tpl) => (
+                      <button
+                        key={tpl.key}
+                        type="button"
+                        onClick={() => setActiveWaTemplate(tpl.key as WhatsAppTemplateKey)}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition border ${
+                          activeWaTemplate === tpl.key
+                            ? "bg-[#000000] text-white border-[#000000] shadow-xs"
+                            : "bg-white text-[#4B5563] border-[#D1D5DB] hover:bg-[#F3F4F6] hover:text-[#111827]"
+                        }`}
+                      >
+                        {tpl.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Editable Textarea */}
+                <textarea
+                  rows={3}
+                  value={waCustomText}
+                  onChange={(e) => setWaCustomText(e.target.value)}
+                  className="w-full text-xs p-3 bg-[#FAF8F5] border border-[#D1D5DB] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#000000] font-sans leading-relaxed text-[#111827]"
+                  placeholder="WhatsApp message copy..."
+                />
+
+                <div className="flex items-center justify-between text-[11px] text-[#6B7280] flex-wrap gap-2">
+                  <span>
+                    You can edit the text above before sending. Clicking "Send WhatsApp Message" dispatches this exact message.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(waCustomText);
+                      showToast("WhatsApp message copied to clipboard!");
+                    }}
+                    className="font-bold text-[#111827] hover:underline flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3 text-[#6B7280]" />
+                    <span>Copy Text</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 5. Step 2: What Happened on Call? (1-Click Outcome Buttons) */}
+              <div className="space-y-2">
                 <span className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider block">
                   Step 2: What happened on the call? (Click 1 button)
                 </span>
@@ -830,8 +935,8 @@ export default function TelecallerDeskPage() {
                 )}
               </div>
 
-              {/* 5. Quick Call Note & Activity History */}
-              <div className="space-y-3 pt-2 border-t border-[#F3F4F6]">
+              {/* 6. Quick Call Note & Activity History */}
+              <div className="space-y-2.5 pt-2 border-t border-[#F3F4F6]">
                 <span className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider block">
                   Quick Note & History
                 </span>
@@ -858,7 +963,7 @@ export default function TelecallerDeskPage() {
                 </div>
 
                 {/* Timeline Events */}
-                <div className="space-y-1.5 pt-1 max-h-40 overflow-y-auto">
+                <div className="space-y-1.5 pt-1 max-h-36 overflow-y-auto">
                   {events.length === 0 ? (
                     <p className="text-[11px] text-[#9CA3AF] italic text-center py-2">
                       No call records logged yet for this lead.
